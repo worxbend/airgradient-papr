@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="airdeck logo">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FBFAF5"/>
+      <stop offset="1" stop-color="#EEEADD"/>
+    </linearGradient>
+  </defs>
+  <!-- e-ink paper tile -->
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#paper)" stroke="#111827" stroke-width="6"/>
+  <!-- CO2-style gauge arc (270°, gap at bottom) -->
+  <path d="M72.8 183.2 A78 78 0 1 1 183.2 183.2" fill="none" stroke="#D5D0C2" stroke-width="16" stroke-linecap="round"/>
+  <path d="M72.8 183.2 A78 78 0 0 1 191 82" fill="none" stroke="#111827" stroke-width="16" stroke-linecap="round"/>
+  <!-- knob riding the arc -->
+  <circle cx="191" cy="82" r="13" fill="#10b981" stroke="#0b3f30" stroke-width="3"/>
+  <!-- air waves in the centre -->
+  <g fill="none" stroke="#10b981" stroke-width="9" stroke-linecap="round">
+    <path d="M96 116 q16 -12 32 0 t32 0"/>
+    <path d="M100 140 q14 -11 28 0 t28 0"/>
+  </g>
+</svg>
