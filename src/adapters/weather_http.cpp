@@ -11,7 +11,9 @@
 namespace adapters {
 
 namespace {
-float atofOr(const char* s) { return (s && s[0]) ? (float)atof(s) : NAN; }
+float atofOr(const char* s) {
+  return (s && s[0]) ? (float)atof(s) : NAN;
+}
 
 // Day-of-week (0=Sun) via Sakamoto's algorithm.
 int dow(int y, int m, int d) {
@@ -44,14 +46,22 @@ bool containsCI(const char* hay, const char* needle) {
 void shortCond(const char* d, char* out, size_t n) {
   auto has = [&](const char* k) { return containsCI(d, k); };
   const char* w = "CLOUDY";
-  if (!d || !d[0]) w = "--";
-  else if (has("thunder") || has("storm")) w = "STORM";
-  else if (has("snow") || has("sleet") || has("blizzard")) w = "SNOW";
-  else if (has("rain") || has("drizzle") || has("shower")) w = "RAIN";
-  else if (has("fog") || has("mist")) w = "FOG";
-  else if (has("sunny") || has("clear")) w = "CLEAR";
-  else if (has("overcast")) w = "OVERCAST";
-  else if (has("partly") || has("cloud")) w = "CLOUDY";
+  if (!d || !d[0])
+    w = "--";
+  else if (has("thunder") || has("storm"))
+    w = "STORM";
+  else if (has("snow") || has("sleet") || has("blizzard"))
+    w = "SNOW";
+  else if (has("rain") || has("drizzle") || has("shower"))
+    w = "RAIN";
+  else if (has("fog") || has("mist"))
+    w = "FOG";
+  else if (has("sunny") || has("clear"))
+    w = "CLEAR";
+  else if (has("overcast"))
+    w = "OVERCAST";
+  else if (has("partly") || has("cloud"))
+    w = "CLOUDY";
   strlcpy(out, w, n);
 }
 }  // namespace
@@ -172,7 +182,11 @@ bool WeatherHttp::fetch(double lat, double lon, const char* city,
   strlcpy(w.city, city, sizeof(w.city));
 
   // ---- forecast: 3 days + flattened 3-hourly slots ------------------------
-  struct FlatH { int hour; float t; int uv; };
+  struct FlatH {
+    int hour;
+    float t;
+    int uv;
+  };
   FlatH flat[24];
   int nflat = 0;
   int di = 0;
@@ -180,8 +194,9 @@ bool WeatherHttp::fetch(double lat, double lon, const char* city,
     if (di < 3) {
       int y = 0, mo = 0, dd = 0;
       sscanf(day["date"] | "", "%d-%d-%d", &y, &mo, &dd);
-      if (y) strlcpy(w.days[di].name, dowName(dow(y, mo, dd)),
-                     sizeof(w.days[di].name));
+      if (y)
+        strlcpy(w.days[di].name, dowName(dow(y, mo, dd)),
+                sizeof(w.days[di].name));
       w.days[di].tMax = atofOr(day["maxtempC"] | "");
       w.days[di].tMin = atofOr(day["mintempC"] | "");
     }
@@ -210,7 +225,10 @@ bool WeatherHttp::fetch(double lat, double lon, const char* city,
   int start = 0;
   if (curBlock >= 0)
     for (int i = 0; i < 8 && i < nflat; ++i)
-      if (flat[i].hour >= curBlock) { start = i; break; }
+      if (flat[i].hour >= curBlock) {
+        start = i;
+        break;
+      }
   w.nHours = 0;
   for (int i = 0; i < 8 && start + i < nflat; ++i) {
     FlatH& f = flat[start + i];

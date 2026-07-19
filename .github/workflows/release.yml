@@ -1,0 +1,60 @@
+name: 🚀 Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 📦 Build & publish factory image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PlatformIO + esptool
+        run: pip install --upgrade platformio esptool
+
+      - name: Provision placeholder config
+        run: cp include/config.example.hpp include/config.hpp
+
+      - name: Build firmware
+        run: pio run -e t5-epd47-v1
+
+      - name: Merge single-file factory image
+        run: |
+          BUILD=.pio/build/t5-epd47-v1
+          BOOT_APP0=$(find ~/.platformio/packages -name boot_app0.bin | head -1)
+          python -m esptool --chip esp32 merge_bin \
+            --flash_mode dio --flash_freq 40m --flash_size 16MB \
+            -o airdeck-factory-${{ github.ref_name }}.bin \
+            0x1000  "$BUILD/bootloader.bin" \
+            0x8000  "$BUILD/partitions.bin" \
+            0xe000  "$BOOT_APP0" \
+            0x10000 "$BUILD/firmware.bin"
+          cp "$BUILD/firmware.bin" airdeck-firmware-${{ github.ref_name }}.bin
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            airdeck-factory-${{ github.ref_name }}.bin
+            airdeck-firmware-${{ github.ref_name }}.bin
+          body: |
+            ## 🌬️ airdeck ${{ github.ref_name }}
+
+            **Flash the whole thing** (single factory image, offset 0x0):
+            ```bash
+            esptool.py --chip esp32 --port /dev/ttyUSB0 write_flash 0x0 \
+              airdeck-factory-${{ github.ref_name }}.bin
+            ```
+            Remember to set your Wi-Fi + AirGradient IP in `include/config.hpp`
+            and rebuild for a personalised image — this artifact ships with
+            placeholder credentials.
