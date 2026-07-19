@@ -16,7 +16,7 @@ jobs:
     name: 🧪 Domain unit tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -41,7 +41,7 @@ jobs:
       matrix:
         env: [t5-epd47-v1, t5-epd47-v1-batt]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -75,7 +75,7 @@ jobs:
     # reports style drift without gating the pipeline.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check formatting
         run: |
           sudo apt-get update && sudo apt-get install -y clang-format
