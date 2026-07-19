@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 360" width="1280" height="360" role="img" aria-label="airdeck — e-ink remote panel for AirGradient">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#111c33"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FBFAF5"/>
+      <stop offset="1" stop-color="#EDE9DC"/>
+    </linearGradient>
+    <style>
+      .wm { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-weight: 800; }
+      .tx { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-weight: 500; }
+      .cap{ font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-weight: 700; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1280" height="360" rx="28" fill="url(#bg)"/>
+
+  <!-- ── left: logo mark + wordmark ── -->
+  <g transform="translate(72 96)">
+    <!-- gauge mark -->
+    <path d="M28 132 A76 76 0 1 1 132 132" fill="none" stroke="#2b3b57" stroke-width="15" stroke-linecap="round"/>
+    <path d="M28 132 A76 76 0 0 1 145 33" fill="none" stroke="#e9edf5" stroke-width="15" stroke-linecap="round"/>
+    <circle cx="145" cy="33" r="12" fill="#10b981" stroke="#052e22" stroke-width="3"/>
+    <g fill="none" stroke="#10b981" stroke-width="8" stroke-linecap="round">
+      <path d="M52 70 q16 -12 32 0 t32 0"/>
+      <path d="M56 92 q14 -11 28 0 t28 0"/>
+    </g>
+  </g>
+
+  <text x="240" y="158" class="wm" font-size="88" fill="#f7f9fc">airdeck</text>
+  <text x="246" y="204" class="tx" font-size="23" fill="#9fb3c8">The e-ink remote panel for your AirGradient ONE.</text>
+  <text x="246" y="252" class="cap" font-size="22" fill="#10b981" letter-spacing="2">AIR&#160;&#160;·&#160;&#160;WEATHER&#160;&#160;·&#160;&#160;CURRENCY</text>
+  <!-- paging dots -->
+  <g transform="translate(246 286)">
+    <circle cx="8"  cy="0" r="7" fill="#10b981"/>
+    <circle cx="34" cy="0" r="7" fill="none" stroke="#3a4a66" stroke-width="2"/>
+    <circle cx="60" cy="0" r="7" fill="none" stroke="#3a4a66" stroke-width="2"/>
+  </g>
+
+  <!-- ── right: three mini e-ink pages ── -->
+  <!-- Page 1: air (gauge) -->
+  <g transform="translate(792 66)">
+    <rect x="0" y="0" width="140" height="228" rx="14" fill="url(#paper)"/>
+    <path d="M28 150 A44 44 0 1 1 88 150" fill="none" stroke="#d3cebf" stroke-width="10" stroke-linecap="round"/>
+    <path d="M28 150 A44 44 0 0 1 96 62" fill="none" stroke="#111827" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="96" cy="62" r="8" fill="#fff" stroke="#111827" stroke-width="3"/>
+    <text x="58" y="112" class="wm" font-size="26" fill="#111827" text-anchor="middle">480</text>
+    <text x="58" y="132" class="tx" font-size="12" fill="#5b6472" text-anchor="middle">CO₂</text>
+    <rect x="18" y="176" width="46" height="36" rx="6" fill="none" stroke="#c9c3b2" stroke-width="2"/>
+    <rect x="76" y="176" width="46" height="36" rx="6" fill="none" stroke="#c9c3b2" stroke-width="2"/>
+  </g>
+  <!-- Page 2: weather -->
+  <g transform="translate(948 66)">
+    <rect x="0" y="0" width="140" height="228" rx="14" fill="url(#paper)"/>
+    <circle cx="42" cy="52" r="16" fill="none" stroke="#111827" stroke-width="3"/>
+    <g stroke="#111827" stroke-width="3" stroke-linecap="round">
+      <path d="M42 26v-9M42 87v-9M12 52H3M81 52h-9M22 32l-6-6M68 32l6-6"/>
+    </g>
+    <text x="86" y="46" class="wm" font-size="24" fill="#111827">30°</text>
+    <g stroke="#111827" stroke-width="3" stroke-linecap="round">
+      <path d="M20 128h100M20 156h80M20 184h96"/>
+    </g>
+  </g>
+  <!-- Page 3: currency (sparkline) -->
+  <g transform="translate(1104 66)">
+    <rect x="0" y="0" width="140" height="228" rx="14" fill="url(#paper)"/>
+    <polyline points="18,96 34,80 50,86 66,60 82,68 98,44 118,52" fill="none" stroke="#111827" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <g stroke="#111827" stroke-width="3" stroke-linecap="round">
+      <path d="M20 140h70"/><path d="M110 140h12"/>
+      <path d="M20 168h70"/><path d="M104 168h18"/>
+      <path d="M20 196h70"/><path d="M100 196h22"/>
+    </g>
+  </g>
+</svg>
