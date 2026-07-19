@@ -6,6 +6,8 @@
 #include <WiFiClientSecure.h>
 #include <time.h>
 
+#include "app/clock.hpp"
+
 namespace adapters {
 
 bool CurrencyHttp::tlsGet(const char* url, String& body, uint32_t timeoutMs) {
@@ -42,7 +44,11 @@ bool CurrencyHttp::fetch(domain::Currency& out) {
   if (!tlsGet("https://bank.gov.ua/NBUStatService/v1/statdirectory/"
               "exchange?json",
               body)) {
-    snprintf(err_, sizeof(err_), "nbu: %s", err_);
+    // tlsGet already left the underlying reason in err_; prefix "nbu: " via a
+    // scratch copy — snprintf'ing err_ into itself would be aliasing UB.
+    char why[sizeof(err_)];
+    strlcpy(why, err_, sizeof(why));
+    snprintf(err_, sizeof(err_), "nbu: %s", why);
     return false;
   }
   {
@@ -86,7 +92,7 @@ bool CurrencyHttp::fetch(domain::Currency& out) {
 
   // ---- NBU 30-day USD/UAH history ----
   time_t now = time(nullptr);
-  if (now > 1700000000) {
+  if (now > app::kClockSyncedAfter) {  // history needs a real date range
     char start[9], end[9];
     struct tm t;
     localtime_r(&now, &t);

@@ -16,7 +16,27 @@ class EpdGuard {
   static constexpr int kPartialBudget = 6;                       // §6.1 N=6
   static constexpr uint32_t kFullBackstopMs = 15UL * 60 * 1000;  // §6.1
 
-  bool init();  // epd_init + allocate FB (white) + boot hygiene. false=no PSRAM
+  // Refuse a panel push below this much *internal* free heap. epd_draw_*
+  // spawns two 8 KB FreeRTOS worker tasks per frame; if that xTaskCreate fails
+  // under low heap the draw blocks forever on a semaphore (see handbook §3 and
+  // DECISIONS "white-screen hang"). Keep the region dirty and retry later.
+  static constexpr uint32_t kMinHeapForRefresh = 55000u;
+
+  // Panel-safe ambient range. The GC16 waveform is tuned for ~0..50 °C; driving
+  // it well outside that risks a bad image or DC imbalance, so we hold the last
+  // frame instead (costs nothing on e-paper) until temperature is back in band.
+  static constexpr float kMinSafeTempC = 0.0f;
+  static constexpr float kMaxSafeTempC = 50.0f;
+
+  // epd_init + allocate the 4 bpp framebuffer (white) + boot hygiene.
+  // Returns false if PSRAM allocation fails.
+  //
+  // clearOnBoot=true (default, USB profile): wipe the panel to white now.
+  // clearOnBoot=false (battery timer wake): keep whatever image is already on
+  // the bistable panel — the caller decides whether to redraw — so a skipped
+  // refresh actually preserves pixels. Boot hygiene still forces a clear if the
+  // previous run did not flag a clean shutdown, regardless of this flag.
+  bool init(bool clearOnBoot = true);
 
   uint8_t* framebuffer() { return fb_; }
 

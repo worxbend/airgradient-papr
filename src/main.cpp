@@ -1,11 +1,16 @@
 // src/main.cpp — composition root (PLAN.md §D5, §8.1).
 //
+// This is the "front door": it creates every adapter and wires the layers
+// together. New to the project? Read docs/handbook/ (ch. 01 architecture,
+// ch. 02 power) alongside this file.
+//
 // Default (USB always-on): net_task (core 0) polls Wi-Fi/HTTP into a length-1
 // mailbox; the Arduino loop (core 1) renders LVGL + drives the panel. All LVGL
 // calls stay on the UI task.
 //
-// -DPROFILE_BATTERY: single-shot — wake, connect, poll, render, power the panel
-// fully off, deep-sleep for the poll interval.
+// -DPROFILE_BATTERY: single-shot — wake, connect, poll, render only when the
+// reading changed, power the panel fully off, deep-sleep for
+// cfg::kBatteryPollSeconds. See docs/handbook/02-power-model.md.
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include <WiFi.h>
@@ -20,6 +25,7 @@
 #include "adapters/weather_http.hpp"
 #include "adapters/wifi_link.hpp"
 #include "app/buttons.hpp"
+#include "app/clock.hpp"
 #include "app/health.hpp"
 #include "app/snapshot.hpp"
 #include "config.hpp"
@@ -37,7 +43,9 @@
 static adapters::EpdGuard g_guard;
 static lv_display_t* g_disp = nullptr;
 
-static bool bringUpDisplay() {
+// clearPanel=false preserves the on-panel image across a battery timer wake
+// (see EpdGuard::init); the USB profile always clears.
+static bool bringUpDisplay(bool clearPanel = true) {
   bool ok = true;
   if (!psramFound()) {
     Serial.println("[fatal] PSRAM not found — check board/build flags");
@@ -46,7 +54,7 @@ static bool bringUpDisplay() {
     Serial.printf("[boot] PSRAM: %u bytes free\n",
                   (unsigned)ESP.getFreePsram());
   }
-  if (!g_guard.init()) {
+  if (!g_guard.init(clearPanel)) {
     Serial.println("[fatal] EPD framebuffer alloc failed");
     ok = false;
   }
@@ -134,7 +142,7 @@ static void netTask(void*) {
     }
 
     uint32_t nowC = millis();
-    bool timeReady = time(nullptr) > 1700000000;
+    bool timeReady = app::timeIsSynced();
     if ((lastCurrency == 0 && timeReady) ||
         (lastCurrency != 0 &&
          nowC - lastCurrency >= cfg::kCurrencyPollSeconds * 1000UL)) {
@@ -247,24 +255,75 @@ void loop() {
 // ===========================================================================
 #else  // ---- Battery deep-sleep profile (single-shot per wake) ------------
 // ===========================================================================
+//
+// Runtime on a LiPo is dominated by how often we wake, so this profile:
+//   * sleeps for cfg::kBatteryPollSeconds (minutes, not the 30 s USB cadence);
+//   * preserves the bistable panel image across a timer wake and only spends a
+//     full GC16 refresh when the air reading actually changed (or every Nth
+//     wake, to refresh the clock and clear ghosting);
+//   * never wastes a refresh on a "Connecting" splash — the last good frame
+//     stays on screen for the few seconds it takes to poll.
+// See handbook §2 (Power model) for the numbers.
+
+// RTC slow-memory state — survives deep sleep, lost on power-cut / reset.
+RTC_DATA_ATTR static uint32_t rtcLastSig = 0;  // signature of on-panel reading
+RTC_DATA_ATTR static uint32_t rtcWakeCount = 0;  // wakes since cold boot
+RTC_DATA_ATTR static bool rtcHasImage = false;  // has the panel ever been drawn
+
+// FNV-1a hash of the values we actually render, quantised to display precision,
+// so a sub-digit sensor wiggle doesn't cost a full-screen refresh.
+static uint32_t measurementSignature(const domain::Measurement& m) {
+  auto q = [](float v, float scale) -> int32_t {
+    return domain::has(v) ? (int32_t)lroundf(v * scale) : INT32_MIN;
+  };
+  const int32_t fields[] = {
+      q(m.rco2, 1),       q(m.pm02, 10),     q(m.tempC(), 1),
+      q(m.humidity(), 1), q(m.tvocIndex, 1), q(m.noxIndex, 1),
+      q(m.pm01, 10),      q(m.pm10, 10),     q(m.pm003Count, 1),
+  };
+  uint32_t h = 2166136261u;
+  for (int32_t v : fields) {
+    const uint8_t* p = (const uint8_t*)&v;
+    for (int i = 0; i < 4; ++i) {
+      h ^= p[i];
+      h *= 16777619u;
+    }
+  }
+  return h ? h : 1u;  // reserve 0 for "no signature yet"
+}
+
+static void sleepFor(uint32_t seconds) {
+  g_guard
+      .markCleanShutdown();    // clean flag -> next wake may preserve the image
+  g_guard.powerOffForSleep();  // rails + peripherals down (§6.1.3)
+  WiFi.disconnect(true, false);
+  Serial.printf("[sleep] %lus\n", (unsigned long)seconds);
+  Serial.flush();
+  esp_sleep_enable_timer_wakeup((uint64_t)seconds * 1000000ULL);
+  esp_deep_sleep_start();
+}
+
 void setup() {
   Serial.begin(115200);
   delay(200);
   Serial.println("\n[airdeck] wake (battery profile)");
-  bringUpDisplay();
+
+  // A cold boot (power-on / reset) clears the panel; a timer wake keeps the
+  // existing image so an unchanged reading can skip the refresh entirely.
+  const bool coldBoot = esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_TIMER;
+  bringUpDisplay(/*clearPanel=*/coldBoot);
 
   float vbat = app::batteryVoltage();
   Serial.printf("[batt] %.2f V (%d%%)\n", vbat, app::batteryPercent());
 
   // Brownout gate (§6.1.4): too low to safely drive a waveform -> show a static
-  // charge screen once and sleep long.
+  // charge screen once and sleep long. vbat<=0.5 means "no divider / on USB".
   if (vbat > 0.5f && vbat < app::kBatteryLowV) {
     ui::showMessage("CHARGE ME", "Battery low", "");
     lv_refr_now(g_disp);
-    g_guard.markCleanShutdown();
-    g_guard.powerOffForSleep();
-    esp_sleep_enable_timer_wakeup((uint64_t)600 * 1000000ULL);  // 10 min
-    esp_deep_sleep_start();
+    rtcLastSig = 0;  // force a real redraw once the pack recovers
+    rtcHasImage = true;
+    sleepFor(cfg::kBatteryLowSleepSeconds);
   }
 
   adapters::WifiLink wifi(cfg::kWifiSsid, cfg::kWifiPass);
@@ -274,10 +333,7 @@ void setup() {
              "time.nist.gov");
 
   app::Snapshot snap;
-  snap.state = app::NetState::Connecting;
-  ui::showMessage("AIRDECK", "Connecting", "");
-  lv_refr_now(g_disp);
-
+  bool pollOk = false;
   if (wifi.ensureConnected()) {
     snap.rssi = wifi.rssi();
     domain::Measurement m;
@@ -287,6 +343,7 @@ void setup() {
       snap.lastOkMs = millis();
       snap.pollCount = 1;
       g_guard.setAmbientTempC(m.tempC());
+      pollOk = true;
       Serial.printf("[net] ok  CO2=%.0f PM2.5=%.1f T=%.1f\n", m.rco2, m.pm02,
                     m.tempC());
     } else {
@@ -297,19 +354,31 @@ void setup() {
     snap.state = app::NetState::Offline;
   }
 
-  ui::update(snap);
-  lv_refr_now(g_disp);  // render + flush synchronously before sleeping
+  ui::update(snap);  // refresh page models (no panel I/O by itself)
 
-  // Panel + peripherals fully off (§6.1.3) — the image persists with no power.
-  g_guard.markCleanShutdown();
-  g_guard.powerOffForSleep();
-  WiFi.disconnect(true, false);
+  // Decide whether this wake earns a full-screen refresh.
+  const uint32_t sig = pollOk ? measurementSignature(snap.m) : 0;
+  const bool changed = pollOk && sig != rtcLastSig;
+  const bool backstop = cfg::kBatteryFullRefreshEvery != 0 &&
+                        rtcWakeCount % cfg::kBatteryFullRefreshEvery == 0;
+  // Always draw the very first frame; otherwise only when data changed or the
+  // periodic backstop is due. A failed poll never redraws — it would just
+  // reprint the same numbers and burn a waveform.
+  const bool doRefresh = !rtcHasImage || (pollOk && (changed || backstop));
 
-  uint64_t us = (uint64_t)cfg::kPollSeconds * 1000000ULL;
-  Serial.printf("[sleep] %lus\n", (unsigned long)cfg::kPollSeconds);
-  Serial.flush();
-  esp_sleep_enable_timer_wakeup(us);
-  esp_deep_sleep_start();
+  if (doRefresh) {
+    ui::showMainNow();    // leave splash, show the dashboard, full-invalidate
+    lv_refr_now(g_disp);  // render + flush synchronously before sleeping
+    rtcHasImage = true;
+    if (pollOk) rtcLastSig = sig;
+    Serial.printf("[epd] refresh (%s)\n",
+                  !changed ? "backstop/first" : "changed");
+  } else {
+    Serial.println("[epd] skip refresh (unchanged)");
+  }
+
+  rtcWakeCount++;
+  sleepFor(cfg::kBatteryPollSeconds);
 }
 
 void loop() {}  // never reached — deep sleep restarts from setup()

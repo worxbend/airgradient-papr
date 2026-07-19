@@ -39,6 +39,19 @@ constexpr uint8_t kNightStartHour = 23;  // inclusive
 constexpr uint8_t kNightEndHour = 7;     // exclusive
 constexpr bool kFahrenheit = false;
 
+// ---- Battery profile (-DPROFILE_BATTERY only) ------------------------------
+// Wall power ignores all of these. On battery the board is a single-shot
+// wake->poll->render->deep-sleep loop, so the wake cadence dominates runtime:
+// waking every kPollSeconds (30 s) would flatten a LiPo in ~a day, so battery
+// gets its own, much longer interval. See handbook §2 (Power model).
+constexpr uint32_t kBatteryPollSeconds = 900;  // wake cadence on battery (15 min)
+// Even when the air reading is byte-identical to what's already on the panel,
+// force a full GC16 redraw every Nth wake — refreshes the clock and clears any
+// e-paper ghosting. 0 disables the "skip unchanged" optimisation entirely.
+constexpr uint32_t kBatteryFullRefreshEvery = 4;  // ~hourly at 15-min wakes
+// How long to sleep when the pack is too low to safely drive a waveform.
+constexpr uint32_t kBatteryLowSleepSeconds = 1800;  // 30 min
+
 // Timezone offset from UTC in seconds, used only for the on-screen clock
 // (e.g. UTC+3 = 10800). Auto-detection is unreliable, so set it here.
 constexpr long kGmtOffsetSec = 0;

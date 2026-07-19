@@ -9,7 +9,7 @@ namespace adapters {
 static constexpr size_t kFbBytes =
     (size_t)EPD_WIDTH / 2 * EPD_HEIGHT;  // 259200
 
-bool EpdGuard::init() {
+bool EpdGuard::init(bool clearOnBoot) {
   epd_init();
 
   fb_ = (uint8_t*)heap_caps_malloc(kFbBytes, MALLOC_CAP_SPIRAM);
@@ -25,13 +25,18 @@ bool EpdGuard::init() {
   prefs.putBool("clean", false);  // mark "running / dirty" for this session
   prefs.end();
 
-  epd_poweron();
-  epd_clear();
-  if (!wasClean) {
-    // extra white settle frame after an unclean shutdown
-    epd_draw_grayscale_image(epd_full_screen(), fb_);
+  // A battery timer-wake with a clean shutdown keeps the existing image (a full
+  // clear here would both waste a waveform and destroy the pixels a skipped
+  // refresh means to preserve). Every other case starts from a clean panel.
+  if (clearOnBoot || !wasClean) {
+    epd_poweron();
+    epd_clear();
+    if (!wasClean) {
+      // extra white settle frame after an unclean shutdown
+      epd_draw_grayscale_image(epd_full_screen(), fb_);
+    }
+    epd_poweroff();
   }
-  epd_poweroff();
 
   lastFullMs_ = millis();
   return true;
@@ -63,13 +68,14 @@ void EpdGuard::present(bool forceFull) {
 
   // Temperature clamp (§6.1.5): refuse refreshes outside the panel's safe
   // range; keep the last image (costs nothing) and retry when back in range.
-  if (!isnan(tempC_) && (tempC_ < 0.0f || tempC_ > 50.0f)) return;
+  if (!isnan(tempC_) && (tempC_ < kMinSafeTempC || tempC_ > kMaxSafeTempC))
+    return;
 
   // Heap gate: epd_draw_* spawns 8 KB worker tasks per frame; if internal heap
   // is momentarily low (a TLS/HTTP fetch holding a big buffer) that xTaskCreate
   // fails and hangs on a semaphore. Defer — keep dirty_ set and retry when heap
   // recovers (the interval refresh calls again shortly).
-  if (ESP.getFreeHeap() < 55000u) return;
+  if (ESP.getFreeHeap() < kMinHeapForRefresh) return;
 
   // Full refresh for every update (partial updates are disabled by request):
   // cleaner on this panel and avoids partial-refresh artifacts.

@@ -8,6 +8,8 @@
 #include <WiFiClient.h>
 #include <time.h>
 
+#include "app/clock.hpp"
+
 namespace adapters {
 
 namespace {
@@ -217,7 +219,7 @@ bool WeatherHttp::fetch(double lat, double lon, const char* city,
   // Hourly row starts at the current 3-hour block.
   int curBlock = -1;
   time_t now = time(nullptr);
-  if (now > 1700000000) {
+  if (now > app::kClockSyncedAfter) {
     struct tm lt;
     localtime_r(&now, &lt);
     curBlock = (lt.tm_hour / 3) * 3;
