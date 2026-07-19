@@ -1,0 +1,83 @@
+name: 🛠️ CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Host unit tests for the pure domain/ layer (fast, no hardware) ─────────
+  unit-tests:
+    name: 🧪 Domain unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-test-${{ hashFiles('platformio.ini') }}
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+      - name: Run tests
+        run: pio test -e native-test -v
+
+  # ── Firmware build matrix (device envs) ───────────────────────────────────
+  build:
+    name: 🔧 Build ${{ matrix.env }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [t5-epd47-v1, t5-epd47-v1-batt]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ matrix.env }}-${{ hashFiles('platformio.ini') }}
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+      - name: Provision placeholder config
+        run: cp include/config.example.hpp include/config.hpp
+      - name: Build
+        run: pio run -e ${{ matrix.env }}
+      - name: Size report
+        run: pio run -e ${{ matrix.env }} --target size || true
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.env }}
+          path: .pio/build/${{ matrix.env }}/firmware.bin
+          if-no-files-found: error
+
+  # ── Formatting check (clang-format) ───────────────────────────────────────
+  format:
+    name: 🎨 clang-format
+    runs-on: ubuntu-latest
+    # Advisory: CI's clang-format version may differ from the author's, so this
+    # reports style drift without gating the pipeline.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check formatting
+        run: |
+          sudo apt-get update && sudo apt-get install -y clang-format
+          find src include test -regex '.*\.\(cpp\|hpp\|h\)$' \
+            | xargs clang-format --dry-run --Werror

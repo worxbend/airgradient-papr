@@ -17,7 +17,9 @@ void WifiLink::begin() {
   nextAttemptAt_ = 0;  // attempt immediately
 }
 
-bool WifiLink::connected() const { return WiFi.status() == WL_CONNECTED; }
+bool WifiLink::connected() const {
+  return WiFi.status() == WL_CONNECTED;
+}
 
 int WifiLink::rssi() const {
   return connected() ? WiFi.RSSI() : 0;

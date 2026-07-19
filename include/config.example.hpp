@@ -27,21 +27,21 @@ constexpr char kMonitorSerial[] = "";
 // ---- Outdoor weather + UV (Open-Meteo, no API key) -------------------------
 // Location: leave both at 0 to auto-detect via IP geolocation (ip-api.com).
 // Set explicit coordinates to override.
-constexpr double  kLatitude  = 0.0;
-constexpr double  kLongitude = 0.0;
-constexpr uint32_t kWeatherPollSeconds = 600;   // 10 min
-constexpr uint32_t kCurrencyPollSeconds = 1800; // 30 min
-constexpr uint32_t kPageRefreshSeconds  = 30;   // whole-page redraw interval
+constexpr double kLatitude = 0.0;
+constexpr double kLongitude = 0.0;
+constexpr uint32_t kWeatherPollSeconds = 600;    // 10 min
+constexpr uint32_t kCurrencyPollSeconds = 1800;  // 30 min
+constexpr uint32_t kPageRefreshSeconds = 30;     // whole-page redraw interval
 
 // ---- Behaviour -------------------------------------------------------------
-constexpr uint32_t kPollSeconds    = 30;  // 15..300
-constexpr uint8_t  kNightStartHour = 23;  // inclusive
-constexpr uint8_t  kNightEndHour   = 7;   // exclusive
-constexpr bool     kFahrenheit     = false;
+constexpr uint32_t kPollSeconds = 30;    // 15..300
+constexpr uint8_t kNightStartHour = 23;  // inclusive
+constexpr uint8_t kNightEndHour = 7;     // exclusive
+constexpr bool kFahrenheit = false;
 
 // Timezone offset from UTC in seconds, used only for the on-screen clock
 // (e.g. UTC+3 = 10800). Auto-detection is unreliable, so set it here.
 constexpr long kGmtOffsetSec = 0;
-constexpr int  kDstOffsetSec = 0;
+constexpr int kDstOffsetSec = 0;
 
 }  // namespace cfg

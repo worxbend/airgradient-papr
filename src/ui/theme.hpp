@@ -8,9 +8,10 @@ namespace ui {
 namespace theme {
 
 // Set label text ONLY when it actually changed. lv_label_set_text always
-// invalidates the object, so blindly re-setting every label each refresh dirties
-// the whole screen and forces a full e-paper redraw. Comparing first keeps the
-// dirty region limited to values that really changed -> small partial updates.
+// invalidates the object, so blindly re-setting every label each refresh
+// dirties the whole screen and forces a full e-paper redraw. Comparing first
+// keeps the dirty region limited to values that really changed -> small partial
+// updates.
 inline void setText(lv_obj_t* label, const char* s) {
   const char* cur = lv_label_get_text(label);
   if (!cur || strcmp(cur, s) != 0) lv_label_set_text(label, s);

@@ -21,7 +21,7 @@ void update(const app::Snapshot& s);
 void nextPage();
 void prevPage();
 void gotoMain();
-int  currentPage();
+int currentPage();
 
 // Force a clean full redraw of the currently shown page (interval refresh).
 void refreshCurrent();

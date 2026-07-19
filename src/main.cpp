@@ -30,11 +30,12 @@
 #endif
 #if defined(PROFILE_BATTERY)
 #include <esp_sleep.h>
+
 #include "app/power.hpp"
 #endif
 
 static adapters::EpdGuard g_guard;
-static lv_display_t*      g_disp = nullptr;
+static lv_display_t* g_disp = nullptr;
 
 static bool bringUpDisplay() {
   bool ok = true;
@@ -42,7 +43,8 @@ static bool bringUpDisplay() {
     Serial.println("[fatal] PSRAM not found — check board/build flags");
     ok = false;
   } else {
-    Serial.printf("[boot] PSRAM: %u bytes free\n", (unsigned)ESP.getFreePsram());
+    Serial.printf("[boot] PSRAM: %u bytes free\n",
+                  (unsigned)ESP.getFreePsram());
   }
   if (!g_guard.init()) {
     Serial.println("[fatal] EPD framebuffer alloc failed");
@@ -58,10 +60,10 @@ static bool bringUpDisplay() {
 }
 
 // ===========================================================================
-#if !defined(PROFILE_BATTERY)   // ---- USB always-on profile ----------------
+#if !defined(PROFILE_BATTERY)  // ---- USB always-on profile ----------------
 // ===========================================================================
 static QueueHandle_t g_mailbox = nullptr;
-static app::Buttons  g_buttons;
+static app::Buttons g_buttons;
 
 static void fetchWeather(adapters::WeatherHttp& wx, app::Snapshot& snap,
                          bool& geoDone, double& lat, double& lon) {
@@ -142,7 +144,8 @@ static void netTask(void*) {
         snap.currency = cc;
         Serial.printf(
             "[cur] USD=%.2f EUR=%.2f CNY=%.4f BTC=%.0f ETH=%.0f hist=%d\n",
-            cc.usdUah, cc.eurUah, cc.cnyUsd, cc.btcUsd, cc.ethUsd, cc.histCount);
+            cc.usdUah, cc.eurUah, cc.cnyUsd, cc.btcUsd, cc.ethUsd,
+            cc.histCount);
       } else {
         Serial.printf("[cur] failed: %s\n", currency.lastError());
       }
@@ -192,7 +195,8 @@ void setup() {
   delay(200);
   Serial.println("\n[airdeck] boot (USB profile)");
   bringUpDisplay();
-  lv_timer_handler();  // render the (empty-state) main page now, while heap is high
+  lv_timer_handler();  // render the (empty-state) main page now, while heap is
+                       // high
 
   g_buttons.begin();
   g_mailbox = xQueueCreate(1, sizeof(app::Snapshot));
@@ -221,10 +225,17 @@ void loop() {
 
   // Button navigation: left = prev page, mid = main (AQ), right = next.
   switch (g_buttons.poll()) {
-    case app::Btn::Left:  ui::prevPage(); break;
-    case app::Btn::Mid:   ui::gotoMain(); break;
-    case app::Btn::Right: ui::nextPage(); break;
-    default: break;
+    case app::Btn::Left:
+      ui::prevPage();
+      break;
+    case app::Btn::Mid:
+      ui::gotoMain();
+      break;
+    case app::Btn::Right:
+      ui::nextPage();
+      break;
+    default:
+      break;
   }
 
   app::g_health.fullRefreshes = g_guard.fullRefreshes();
@@ -234,7 +245,7 @@ void loop() {
 }
 
 // ===========================================================================
-#else   // ---- Battery deep-sleep profile (single-shot per wake) ------------
+#else  // ---- Battery deep-sleep profile (single-shot per wake) ------------
 // ===========================================================================
 void setup() {
   Serial.begin(115200);

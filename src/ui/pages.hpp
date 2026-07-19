@@ -8,8 +8,17 @@
 
 namespace ui {
 
-namespace aq       { lv_obj_t* build(); void update(const app::Snapshot&); }
-namespace weather  { lv_obj_t* build(); void update(const app::Snapshot&); }
-namespace currency { lv_obj_t* build(); void update(const app::Snapshot&); }
+namespace aq {
+lv_obj_t* build();
+void update(const app::Snapshot&);
+}  // namespace aq
+namespace weather {
+lv_obj_t* build();
+void update(const app::Snapshot&);
+}  // namespace weather
+namespace currency {
+lv_obj_t* build();
+void update(const app::Snapshot&);
+}  // namespace currency
 
 }  // namespace ui

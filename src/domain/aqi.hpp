@@ -20,24 +20,36 @@ enum class Band : uint8_t {
 
 inline const char* bandWord(Band b) {
   switch (b) {
-    case Band::Good:       return "Good";
-    case Band::Moderate:   return "Moderate";
-    case Band::Elevated:   return "Elevated";
-    case Band::Unhealthy:  return "Unhealthy";
-    case Band::Hazardous:  return "Hazardous";
-    default:               return "--";
+    case Band::Good:
+      return "Good";
+    case Band::Moderate:
+      return "Moderate";
+    case Band::Elevated:
+      return "Elevated";
+    case Band::Unhealthy:
+      return "Unhealthy";
+    case Band::Hazardous:
+      return "Hazardous";
+    default:
+      return "--";
   }
 }
 
 // For temp/RH the app uses comfort language instead of health language.
 inline const char* comfortWord(Band b) {
   switch (b) {
-    case Band::Good:      return "Comfort";
-    case Band::Moderate:  return "Fair";
-    case Band::Elevated:  return "Poor";
-    case Band::Unhealthy: return "Extreme";
-    case Band::Hazardous: return "Extreme";
-    default:              return "--";
+    case Band::Good:
+      return "Comfort";
+    case Band::Moderate:
+      return "Fair";
+    case Band::Elevated:
+      return "Poor";
+    case Band::Unhealthy:
+      return "Extreme";
+    case Band::Hazardous:
+      return "Extreme";
+    default:
+      return "--";
   }
 }
 
@@ -46,15 +58,15 @@ inline int epaAqiPm25(float pm25) {
   if (std::isnan(pm25) || pm25 < 0.0f) return -1;
   // Concentration is truncated to 0.1 µg/m³ per EPA method.
   const float c = std::floor(pm25 * 10.0f) / 10.0f;
-  struct BP { float clo, chi; int ilo, ihi; };
+  struct BP {
+    float clo, chi;
+    int ilo, ihi;
+  };
   static const BP table[] = {
-      {0.0f,   12.0f,   0,   50},
-      {12.1f,  35.4f,   51,  100},
-      {35.5f,  55.4f,   101, 150},
-      {55.5f,  150.4f,  151, 200},
-      {150.5f, 250.4f,  201, 300},
-      {250.5f, 350.4f,  301, 400},
-      {350.5f, 500.4f,  401, 500},
+      {0.0f, 12.0f, 0, 50},       {12.1f, 35.4f, 51, 100},
+      {35.5f, 55.4f, 101, 150},   {55.5f, 150.4f, 151, 200},
+      {150.5f, 250.4f, 201, 300}, {250.5f, 350.4f, 301, 400},
+      {350.5f, 500.4f, 401, 500},
   };
   for (const auto& bp : table) {
     if (c >= bp.clo && c <= bp.chi) {
@@ -67,7 +79,7 @@ inline int epaAqiPm25(float pm25) {
 }
 
 inline Band bandFromAqi(int aqi) {
-  if (aqi < 0)   return Band::NoData;
+  if (aqi < 0) return Band::NoData;
   if (aqi <= 50) return Band::Good;
   if (aqi <= 100) return Band::Moderate;
   if (aqi <= 150) return Band::Elevated;
@@ -75,12 +87,14 @@ inline Band bandFromAqi(int aqi) {
   return Band::Hazardous;
 }
 
-inline Band bandPm25(float pm25) { return bandFromAqi(epaAqiPm25(pm25)); }
+inline Band bandPm25(float pm25) {
+  return bandFromAqi(epaAqiPm25(pm25));
+}
 
 inline Band bandCo2(float ppm) {
-  if (std::isnan(ppm))  return Band::NoData;
-  if (ppm <= 600)  return Band::Good;
-  if (ppm <= 800)  return Band::Moderate;
+  if (std::isnan(ppm)) return Band::NoData;
+  if (ppm <= 600) return Band::Good;
+  if (ppm <= 800) return Band::Moderate;
   if (ppm <= 1000) return Band::Elevated;
   if (ppm <= 1500) return Band::Unhealthy;
   return Band::Hazardous;
@@ -98,8 +112,8 @@ inline Band bandTvoc(float idx) {
 // SGP41 NOx index: 1 nominal, higher = more NOx.
 inline Band bandNox(float idx) {
   if (std::isnan(idx)) return Band::NoData;
-  if (idx <= 1)   return Band::Good;
-  if (idx <= 20)  return Band::Moderate;
+  if (idx <= 1) return Band::Good;
+  if (idx <= 20) return Band::Moderate;
   if (idx <= 150) return Band::Elevated;
   return Band::Unhealthy;
 }

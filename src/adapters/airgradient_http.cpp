@@ -10,7 +10,9 @@ namespace adapters {
 namespace {
 // ArduinoJson v7: `doc[key] | NAN` yields NAN when the key is missing or not
 // numeric, which is exactly our "field absent" sentinel.
-float getf(JsonDocument& d, const char* k) { return d[k] | NAN; }
+float getf(JsonDocument& d, const char* k) {
+  return d[k] | NAN;
+}
 }  // namespace
 
 bool AirGradientHttp::poll(domain::Measurement& out) {
@@ -40,11 +42,17 @@ bool AirGradientHttp::poll(domain::Measurement& out) {
 
   // Response is small (~1 KB). Filter keeps only fields we model.
   JsonDocument filter;
-  for (const char* k :
-       {"rco2", "pm01", "pm02", "pm10", "pm003Count", "pm003_count", "atmp",
-        "atmpCompensated", "rhum", "rhumCompensated", "tvocIndex", "tvocRaw",
-        "noxIndex", "noxRaw", "wifi", "boot", "bootCount", "firmware", "model",
-        "serialno", "ledMode"}) {
+  for (const char* k : {"rco2",       "pm01",
+                        "pm02",       "pm10",
+                        "pm003Count", "pm003_count",
+                        "atmp",       "atmpCompensated",
+                        "rhum",       "rhumCompensated",
+                        "tvocIndex",  "tvocRaw",
+                        "noxIndex",   "noxRaw",
+                        "wifi",       "boot",
+                        "bootCount",  "firmware",
+                        "model",      "serialno",
+                        "ledMode"}) {
     filter[k] = true;
   }
 

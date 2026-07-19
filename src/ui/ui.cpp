@@ -47,7 +47,8 @@ void updatePaging() {
   for (int i = 0; i < PAGE_COUNT; ++i)
     if (pageDots[cur][i])
       lv_obj_set_style_bg_color(
-          pageDots[cur][i], (i == cur) ? lv_color_black() : lv_color_white(), 0);
+          pageDots[cur][i], (i == cur) ? lv_color_black() : lv_color_white(),
+          0);
 }
 
 void loadCurrent() {
@@ -101,8 +102,8 @@ void buildSplash() {
 void setSplashStatus(const app::Snapshot& s) {
   auto mark = [](bool ok) { return ok ? LV_SYMBOL_OK : "..."; };
   char b[96];
-  snprintf(b, sizeof(b), "Air %s     Weather %s     Rates %s",
-           mark(s.m.valid), mark(s.weather.valid), mark(s.currency.valid));
+  snprintf(b, sizeof(b), "Air %s     Weather %s     Rates %s", mark(s.m.valid),
+           mark(s.weather.valid), mark(s.currency.valid));
   theme::setText(splashStatus, b);
 }
 
@@ -134,8 +135,8 @@ void build() {
   buildSplash();
 
   app::Snapshot empty;
-  update(empty);          // seed page fallbacks
-  ready = false;          // (update() may have flipped it on the empty seed)
+  update(empty);  // seed page fallbacks
+  ready = false;  // (update() may have flipped it on the empty seed)
   cur = PAGE_AQ;
   splashStart = millis();
   lv_screen_load(splash);
@@ -163,7 +164,9 @@ void gotoMain() {
   cur = PAGE_AQ;
   loadCurrent();
 }
-int currentPage() { return cur; }
+int currentPage() {
+  return cur;
+}
 
 void refreshCurrent() {
   if (ready) lv_obj_invalidate(pages[cur]);

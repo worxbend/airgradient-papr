@@ -8,7 +8,9 @@
 
 namespace domain {
 
-inline bool has(float v) { return !std::isnan(v); }
+inline bool has(float v) {
+  return !std::isnan(v);
+}
 
 // One decoded /measures/current response. Missing fields stay NaN / empty.
 struct Measurement {
@@ -23,9 +25,9 @@ struct Measurement {
   float rhumCompensated = NAN;  // humidity, % (compensated)
   float tvocIndex = NAN;        // SGP41 VOC index (0..500, ~100 nominal)
   float tvocRaw = NAN;
-  float noxIndex = NAN;         // SGP41 NOx index (~1 nominal)
+  float noxIndex = NAN;  // SGP41 NOx index (~1 nominal)
   float noxRaw = NAN;
-  int   wifi = 0;               // monitor's own RSSI, dBm
+  int wifi = 0;  // monitor's own RSSI, dBm
   uint32_t boot = 0;
   uint32_t bootCount = 0;
   char firmware[20] = {0};
@@ -33,8 +35,8 @@ struct Measurement {
   char serialno[24] = {0};
   char ledMode[16] = {0};
 
-  bool     valid = false;       // true once a poll parsed successfully
-  uint32_t ageMs = 0;           // millis() when captured (filled by adapter)
+  bool valid = false;  // true once a poll parsed successfully
+  uint32_t ageMs = 0;  // millis() when captured (filled by adapter)
 
   // Prefer compensated readings when present.
   float tempC() const { return has(atmpCompensated) ? atmpCompensated : atmp; }

@@ -1,157 +1,194 @@
-# airdeck-papr
+<div align="center">
 
-Standalone Wi-Fi firmware that turns a **LILYGO T5-4.7" E-Paper (V1, ESP32-WROVER-E)**
-into an offline dashboard for an **AirGradient ONE (I-9PSL)**. It polls the
-monitor's local-server API over your LAN (no cloud) and renders an app-style
-card grid on the 960×540 e-ink panel with LVGL 9, plus outdoor weather + UV.
+# 🌬️ airdeck
 
-### Pages & button navigation
+### *Your AirGradient ONE, reborn on gorgeous 4.7″ e-ink.* ✨
 
-Four pages, switched with the three front buttons:
+[![CI](https://github.com/worxbend/airgradient-papr/actions/workflows/ci.yml/badge.svg)](https://github.com/worxbend/airgradient-papr/actions/workflows/ci.yml)
+[![Release](https://github.com/worxbend/airgradient-papr/actions/workflows/release.yml/badge.svg)](https://github.com/worxbend/airgradient-papr/actions/workflows/release.yml)
+![Platform](https://img.shields.io/badge/platform-ESP32--WROVER--E-informational?logo=espressif&logoColor=white)
+![Framework](https://img.shields.io/badge/PlatformIO-Arduino_2.0.x-orange?logo=platformio&logoColor=white)
+![UI](https://img.shields.io/badge/LVGL-9.2-black)
+![E--paper](https://img.shields.io/badge/ED047TC1-960×540_16_gray-lightgrey)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-| Button (GPIO)      | Action            |
-|--------------------|-------------------|
-| Leftmost (34)      | Previous page     |
-| 2nd-from-left (35) | Jump to main (AQ) |
-| Rightmost (39)     | Next page         |
+**No cloud. No app. No subscription.** Just your air, your weather, and your money — rendered paper-crisp on a display you can read from across the room. 🔒📈
 
-1. **AirGradient** (default) — CO2 as an **arc gauge with a knob**, PM2.5 as a
-   **dotted-ring gauge** (both have well-known thresholds), temperature /
-   humidity / TVOC / NOx tiles, PM1.0 / PM10 / PM0.3 tiles, and a clock/date tile.
-2. **Weather** — one compact outdoor page combining current conditions, an
-   AIR panel (humidity/wind/precip/sun), a UV panel (index + band + today's max
-   + high-UV window), an hourly row and a 3-day min–max range-bar forecast.
-3. **Currency** — a 30-day USD/UAH line chart plus rate rows: USD→UAH, EUR→UAH
-   (NBU), CNY→USD, and BTC→USD, ETH→USD (CoinGecko).
+<img src="docs/assets/showcase-main.png" width="760" alt="airdeck main page: CO2 arc gauge + PM2.5 dotted ring + tiles">
 
-A small paging indicator (dots) at the top of each page shows the current page.
+</div>
 
-### Rendering
+---
 
-The panel only redraws what changed. LVGL runs in partial mode and the EPD
-guard pushes just the dirty rectangle (a fast per-region update), inserting a
-full GC16 clear every 6 partials or 15 min for panel health. Crucially, labels
-are only re-set when their text actually changes (`ui::theme::setText`), so an
-unchanged value never dirties the screen — a poll with no visible change does
-**zero** panel refreshes.
+## 💡 What is this?
 
-Weather, UV and forecast come from **wttr.in** (plain HTTP, no key, 3-day
-horizon); location is auto-detected via **ip-api.com** (override with
-`kLatitude`/`kLongitude`).
+You bought an **[AirGradient ONE](https://www.airgradient.com/)** 🟢 because you actually care about the air you breathe. Great taste. But squinting at an RGB LED strip or unlocking your phone to see a number? *Weak.*
 
-See [`PLAN.md`](PLAN.md) for the full design and [`docs/DECISIONS.md`](docs/DECISIONS.md)
-for the locked toolchain/versions and the gotchas hit during bring-up.
+**airdeck** is standalone firmware for a **LILYGO T5-4.7″ ESP32 e-paper** board that adopts your AirGradient ONE and gives it the panoramic, zero-glare, always-on dashboard it deserves — talking to the sensor **entirely over your LAN** via its local API. Then it goes further: **outdoor weather, a 3-day forecast, UV, and live FX + crypto rates.** Because why should a screen this nice only do one thing? 😎
 
-## Hardware
+<div align="center">
+<img src="docs/assets/showcase-weather.png" width="380" alt="Weather page">
+&nbsp;&nbsp;
+<img src="docs/assets/showcase-currency.png" width="380" alt="Currency page">
+</div>
 
-- **Board:** LILYGO T5-4.7" V1 — ESP32-WROVER-E (classic dual-core, 16 MB flash,
-  8 MB QSPI PSRAM, ED047TC1 panel). USB-C via a **CP2104** UART bridge.
-- **Sensor:** AirGradient ONE running firmware ≥ 3.0.x with the local API enabled.
+---
 
-## Quick start
+## 🟢 The AirGradient integration (the whole point)
 
-1. **Toolchain:** PlatformIO Core (`pip install platformio`).
-2. **Config:** copy the example and fill in your Wi-Fi + monitor address:
-   ```bash
-   cp include/config.example.hpp include/config.hpp
-   $EDITOR include/config.hpp        # SSID, password, http://<monitor-ip>/measures/current
-   ```
-   `include/config.hpp` is gitignored — credentials never get committed.
-   Give the AirGradient a **DHCP reservation** so its IP never drifts.
-3. **Verify the API from your machine** first:
-   ```bash
-   curl http://<monitor-ip>/measures/current      # should return JSON
-   ```
-4. **Build + flash** (board on `/dev/ttyUSB0`):
-   ```bash
-   pio run -e t5-epd47-v1 -t upload
-   ```
-5. **Watch it boot:**
-   ```bash
-   pio device monitor -e t5-epd47-v1
-   ```
-   Expected:
-   ```
-   [airdeck] boot
-   [boot] PSRAM: 4192123 bytes free
-   [net] ok #1  CO2=385 PM2.5=29.3 T=28.8 RH=45
-   ```
+airdeck speaks the **AirGradient ONE local-server API** — no AirGradient cloud account, no internet round-trip:
 
-## Host unit tests (no hardware)
-
-The `domain/` layer (AQI, banding, trend, hero selection) is pure C++ and
-tested on the host:
-
-```bash
-pio test -e native-test
+```
+GET http://<your-monitor-ip>/measures/current   →   JSON, every 30 s
 ```
 
-## Mock AirGradient (develop without the real sensor)
+Every field the I-9PSL exposes lands on the panel:
+
+| 🫁 Air | 🌡️ Comfort | 🧪 Chemistry | ℹ️ Meta |
+|---|---|---|---|
+| CO₂ (ppm) | Temperature | TVOC index + raw | firmware / model |
+| PM1.0 / PM2.5 / PM10 | Humidity | NOx index + raw | boot count · LED mode |
+| PM0.3 particle count | (compensated too) | | RSSI |
+
+…all classified with **US EPA AQI** (PM2.5) and per-metric health bands (Good / Moderate / Elevated / Unhealthy). CO₂ and PM2.5 — the two with the clearest thresholds — get their own **gauges**. 🎯
+
+> **Prereqs:** AirGradient firmware **≥ 3.0.10** with the local API enabled, and a **DHCP reservation** so the monitor's IP never drifts. That's it. ✅
+
+Huge respect to the folks at **[AirGradient](https://github.com/airgradienthq)** for building open, hackable, honest hardware. 🙏
+
+---
+
+## 🖥️ The pages
+
+Three full-screen pages, flipped with the board's three buttons — **◀ prev · ⌂ main · next ▶** — with a little paging dot indicator up top.
+
+### 1️⃣ AirGradient  ·  *the main event*
+CO₂ as a sweeping **arc gauge with a knob**, PM2.5 as a **dotted ring** that fills to the value, a 2×2 tile block (temp / humidity / TVOC / NOx), a PM detail row (PM1.0 / PM10 / PM0.3), and a big clock. 🕗
+
+### 2️⃣ Weather  ·  *look outside without looking outside*
+Current conditions + an **AIR** panel (humidity / wind / precip / sunrise–sunset) + a **UV** panel (index, risk band, today's max, high-UV window), an **8-slot hourly strip**, and a **3-day forecast** with min–max range bars. Auto-geolocated 📍, no API key.
+
+### 3️⃣ Currency  ·  *because vibes require context*
+A **30-day USD→UAH line chart** 📉 over live rate rows: **USD→UAH · EUR→UAH · CNY→USD** (National Bank of Ukraine) and **BTC→USD · ETH→USD** (CoinGecko). All free, key-less, public APIs.
+
+> On boot, a 🌀 **splash screen** fetches every data source first, then renders the pages fully-formed — no half-empty screens.
+
+---
+
+## 🧰 Hardware
+
+| Part | Notes |
+|---|---|
+| 🧠 **LILYGO T5-4.7″ V1** | ESP32-**WROVER-E**, 16 MB flash, 8 MB PSRAM, ED047TC1 960×540 e-paper |
+| 🟢 **AirGradient ONE (I-9PSL)** | your air sensor, on the same Wi-Fi |
+| 🔌 USB-A→C data cable | ⚠️ *not* C-to-C — the board lacks CC pulldowns |
+| 🔋 *(optional)* 3.7 V LiPo | JST-PH — **check polarity with a multimeter first!** |
+
+---
+
+## 🚀 Quick start
 
 ```bash
-python3 tools/mock_airgradient.py            # serves /measures/current on :8080
-# point kMonitorUrl at http://<your-dev-ip>:8080/measures/current
+# 1. Grab the code + PlatformIO
+git clone https://github.com/worxbend/airgradient-papr.git && cd airdeck
+pip install platformio
+
+# 2. Tell it about your Wi-Fi + monitor
+cp include/config.example.hpp include/config.hpp
+$EDITOR include/config.hpp          # SSID, password, http://<monitor-ip>/measures/current, timezone
+
+# 3. Sanity-check the sensor is reachable
+curl http://<monitor-ip>/measures/current   # should spit JSON
+
+# 4. Flash it 🔥  (board on /dev/ttyUSB0)
+pio run -e t5-epd47-v1 -t upload
+
+# 5. Watch it wake up
+pio device monitor
 ```
 
-## Flashing / power notes (field-reported traps — see PLAN.md §5)
+```text
+[airdeck] boot
+[boot] PSRAM: 4192123 bytes free
+[net] ok #1  CO2=480 PM2.5=10.2 T=30 RH=43
+[wx]  Kyiv 30C UV 1 Patchy rain nearby
+[cur] USD=44.67 EUR=51.06 BTC=64539 hist=32
+```
 
-- Use a **USB-A→C data cable** or a powered hub. Some units don't enumerate on
-  C-to-C (missing CC pulldowns).
-- If upload fails / the port keeps re-enumerating: hold **BOOT**, tap **RST**,
-  release **BOOT**, then flash.
-- Never repurpose strapping pins **GPIO0/2/5/12/15**; in particular **GPIO12
-  must not be pulled high at boot**.
-- Check LiPo **polarity with a multimeter** before the first battery connect —
-  AliExpress JST-PH pigtails are not standardized.
+Prefer a one-shot image? Every tagged release ships a **single-file factory `.bin`** — flash it at `0x0` with `esptool` and go. 📦
 
-## Environments
-
-| env               | target                                        |
-|-------------------|-----------------------------------------------|
-| `t5-epd47-v1`     | **default** — WROVER-E, USB always-on + OTA + /health |
-| `t5-epd47-v1-batt`| same board, battery deep-sleep single-shot profile |
-| `t5-epd47-s3`     | future ESP32-S3 unit (not this board)         |
-| `native-test`     | host unit tests for `domain/`                 |
-| `diag`            | minimal boot/PSRAM diagnostic sketch          |
-
-## Homelab services (USB profile)
-
-Once connected, the device runs:
-
-- **`GET http://airdeck.local/health`** (or `http://<device-ip>/health`) — JSON
-  with uptime, heap/PSRAM, RSSI, poll counters, last-poll age, and full/partial
-  refresh counts. Scrapeable for monitoring.
-- **ArduinoOTA** as host `airdeck` — reflash without USB:
-  ```bash
-  pio run -e t5-epd47-v1 -t upload --upload-port airdeck.local
-  ```
-
-## Battery profile
+### 🛰️ Over-the-air updates
+Once it's on Wi-Fi it advertises **ArduinoOTA** + a **`/health`** JSON endpoint:
 
 ```bash
-pio run -e t5-epd47-v1-batt -t upload
+pio run -e t5-epd47-v1 -t upload --upload-port airdeck.local   # no USB needed
+curl http://airdeck.local/health                                # uptime, heap, poll stats
 ```
-Single-shot per wake: connect → poll → render → `epd_poweroff_all()` →
-deep-sleep for `kPollSeconds`. Includes a battery-ADC brownout gate (GPIO36):
-below 3.4 V it renders a static "CHARGE ME" frame and refuses waveforms
-(interrupting a waveform mid-drive damages the panel — PLAN §6.1.4).
 
-## Fonts / icons
+---
 
-Custom fonts are committed under `src/ui/fonts/` and regenerated with
-`tools/fontgen.sh` (needs `cd tools && npm install lv_font_conv`): a units font
-with `µ/³/°` glyphs (so `µg/m³` and `°C` render) and an MDI watermark-icon font.
+## 🏗️ Under the hood
 
-## Status / scope
+- **Hexagonal-ish** layout: a pure, host-tested `domain/` (AQI, banding, trend) with thin `adapters/` (HTTP, e-paper, buttons) and `ui/` pages.
+- **Two FreeRTOS tasks + a mailbox** — networking on core 0, LVGL on core 1, no locks.
+- **LVGL 9.2** rendering **L8 → 4 bpp**, its heap pool living in **PSRAM** so Wi-Fi + the e-paper driver keep their internal RAM.
+- **Panel-care baked in** (a hard requirement, not an afterthought): power discipline, full-refresh cadence, temperature clamp, boot hygiene, and a heap-gated refresh so a fetch spike can never wedge the display.
 
-Implemented and verified on-device: board + PSRAM bring-up; the e-paper display
-port (LVGL 9 L8 → 4 bpp); the panel guard (power discipline, partial-refresh
-budget + full-refresh backstop, temperature clamp, boot hygiene, repair
-routine); Wi-Fi + HTTP + JSON data path with backoff reconnect; the two-task
-mailbox architecture; the pure domain layer (host-tested); the single-screen
-dashboard (hero with big clock/date + 8 cards, MDI watermark icons,
-header/footer, stale/offline states); the `/health` endpoint + ArduinoOTA; and
-the battery deep-sleep profile.
+See [`docs/DECISIONS.md`](docs/DECISIONS.md) for the war stories 🪖 and [`PLAN.md`](PLAN.md) for the full design + panel-protection handbook.
 
-Deferred: the SDL desktop simulator (`sim/`). Everything else in PLAN.md's
-implementation tracks is in place.
+### Environments
+| env | target |
+|---|---|
+| `t5-epd47-v1` | **default** — the WROVER-E board, USB always-on |
+| `t5-epd47-v1-batt` | battery deep-sleep single-shot profile |
+| `t5-epd47-s3` | future ESP32-S3 unit |
+| `native-test` | host unit tests for `domain/` |
+
+---
+
+## 🤖 CI/CD
+
+Every push is put through its paces by GitHub Actions:
+
+- 🧪 **Unit tests** — the `domain/` layer on the host
+- 🔧 **Build matrix** — firmware for every device env, artifacts uploaded
+- 🎨 **clang-format** — style stays honest
+- 🚀 **Release** — tag `v*` → builds + merges a factory image → publishes a GitHub Release
+- 🤖 **Dependabot** — keeps the Actions fresh
+
+---
+
+## 📦 Enclosure
+
+<div align="center">
+<img src="docs/assets/showcase-case.png" width="620" alt="airdeck desk-stand enclosure (CAD render)">
+</div>
+
+A slick, angled desk-stand case is in the works. **FreeCAD source + print-ready `.3mf`** are coming soon™ — drop them in `hardware/` and print away. 🖨️
+
+---
+
+## 🛟 Gotchas worth knowing
+
+- 🔌 Use a **USB-A→C** cable (C-to-C won't enumerate).
+- 🪫 On battery: **verify JST-PH polarity with a multimeter** before first connect — AliExpress pigtails aren't standardized.
+- 📌 Give the AirGradient a **DHCP reservation**.
+- ☀️ Keep the panel out of **direct sunlight** — e-ink hates UV.
+- 🔩 Never repurpose strapping pins **GPIO0/2/5/12/15**.
+
+---
+
+## ❤️ Credits & kin
+
+- 🟢 **[AirGradient](https://www.airgradient.com/)** — the open sensor that started it all
+- 🖼️ **[LVGL](https://lvgl.io/)** · **[epdiy](https://github.com/vroland/epdiy)** / **[LilyGo-EPD47](https://github.com/Xinyuan-LilyGO/LilyGo-EPD47)** — pixels on paper
+- 🌦️ **[wttr.in](https://github.com/chubin/wttr.in)** · **[Open-Meteo](https://open-meteo.com/)** · 🏦 **[NBU](https://bank.gov.ua/)** · 🪙 **[CoinGecko](https://www.coingecko.com/)** — the data
+- 🛠️ More builds at **[github.com/worxbend](https://github.com/worxbend)**
+
+<div align="center">
+
+**Built with 🫁, ☕, and a healthy distrust of the cloud.**
+
+*If airdeck made your air visible, drop a ⭐.*
+
+</div>

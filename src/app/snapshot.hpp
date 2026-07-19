@@ -11,12 +11,12 @@ namespace app {
 enum class NetState : uint8_t { Booting, Connecting, Online, Stale, Offline };
 
 struct Snapshot {
-  domain::Measurement m;       // latest good AirGradient reading
-  domain::Weather weather;     // latest outdoor weather + UV (Open-Meteo)
-  domain::Currency currency;   // exchange rates + USD/UAH history
+  domain::Measurement m;      // latest good AirGradient reading
+  domain::Weather weather;    // latest outdoor weather + UV (Open-Meteo)
+  domain::Currency currency;  // exchange rates + USD/UAH history
   NetState state = NetState::Booting;
-  int      rssi = 0;           // ESP32's own RSSI to the AP, dBm
-  uint32_t lastOkMs = 0;       // millis() of last successful poll (0 = never)
+  int rssi = 0;           // ESP32's own RSSI to the AP, dBm
+  uint32_t lastOkMs = 0;  // millis() of last successful poll (0 = never)
   uint32_t consecutiveFail = 0;
   uint32_t pollCount = 0;
 };
