@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/banner.svg" width="900" alt="airdeck — the e-ink remote panel for your AirGradient ONE">
+<img src="docs/assets/banner-v2.webp" width="900" alt="airdeck — your air at a glance on a local, paper-crisp e-ink dashboard">
 
 <br>
 
