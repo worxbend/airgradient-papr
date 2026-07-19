@@ -13,3 +13,5 @@ tools/mdi.css
 pkg-lock.json
 pkg/
 
+bin/
+/pkg/
