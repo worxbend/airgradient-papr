@@ -5,6 +5,7 @@
 #include <math.h>
 #include <time.h>
 
+#include "app/clock.hpp"
 #include "config.hpp"
 #include "domain/aqi.hpp"
 #include "domain/measurement.hpp"
@@ -256,7 +257,7 @@ void update(const app::Snapshot& s) {
 
   char clk[8] = "--:--", dat[24] = "";
   time_t now = time(nullptr);
-  if (now > 1700000000) {
+  if (now > app::kClockSyncedAfter) {
     struct tm t;
     localtime_r(&now, &t);
     snprintf(clk, sizeof(clk), "%02d:%02d", t.tm_hour, t.tm_min);

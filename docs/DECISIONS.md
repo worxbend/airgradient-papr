@@ -1,7 +1,16 @@
 # DECISIONS — airdeck-papr
 
 Lockfile notes and the deviations/gotchas discovered during bring-up.
-Companion to `PLAN.md` (which holds the full rationale).
+
+> **New here?** Read the [Developer Handbook](handbook/README.md) first — it's
+> the book-style, from-first-principles guide to the whole firmware. This file
+> is the terse forensic log of *why each version is pinned* and *how each gotcha
+> was fixed*; the handbook explains *how the system works*.
+>
+> Source comments and this file cite a historical `PLAN.md` with section markers
+> (e.g. `§6.1.4`). That original design spec is not in the repo; its still-useful
+> content now lives in the handbook, which **supersedes it**. The `§` numbers are
+> kept only as stable cross-references.
 
 ## Pinned toolchain / libraries
 

@@ -17,6 +17,12 @@ void showMessage(const char* title, const char* line1, const char* line2);
 // Update every page from the latest snapshot; the active one is on the panel.
 void update(const app::Snapshot& s);
 
+// Leave the splash and show the main (AQ) page immediately, bypassing the
+// "all sources ready" gate that update() uses. The battery profile only fetches
+// AirGradient, so it can never satisfy that gate — it calls this instead.
+// Marks the next render as a full redraw of the main page.
+void showMainNow();
+
 // Button navigation (left = prev, mid = main/AQ, right = next).
 void nextPage();
 void prevPage();

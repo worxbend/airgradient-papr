@@ -140,7 +140,7 @@ curl http://airdeck.local/health                                # uptime, heap, 
 - **LVGL 9.2** rendering **L8 → 4 bpp**, its heap pool living in **PSRAM** so Wi-Fi + the e-paper driver keep their internal RAM.
 - **Panel-care baked in**: power discipline, full-refresh cadence, temperature clamp, boot hygiene, and a heap-gated refresh so a fetch spike can never wedge the display.
 
-See [`docs/DECISIONS.md`](docs/DECISIONS.md) for the war stories 🪖 and [`PLAN.md`](PLAN.md) for the full design.
+📖 **New to the code?** The [**Developer Handbook**](docs/handbook/README.md) is a from-first-principles, book-style walkthrough of the whole firmware (architecture, power model, e-paper internals, module reference, build/flash/debug, troubleshooting). See [`docs/DECISIONS.md`](docs/DECISIONS.md) for the version-pin war stories 🪖.
 
 | env | target |
 |---|---|

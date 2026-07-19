@@ -142,6 +142,12 @@ void build() {
   lv_screen_load(splash);
 }
 
+void showMainNow() {
+  ready = true;
+  cur = PAGE_AQ;
+  loadCurrent();  // loads the main page + full-invalidates it for a clean draw
+}
+
 void showMessage(const char* title, const char* line1, const char* line2) {
   (void)title;
   (void)line2;
