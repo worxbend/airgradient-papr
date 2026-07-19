@@ -1,0 +1,15 @@
+.pio/
+.vscode/
+*.pyc
+__pycache__/
+# Secrets — real config with Wi-Fi credentials is never committed.
+include/config.hpp
+secrets.ini
+# Font toolchain (regenerate with tools/fontgen.sh)
+tools/node_modules/
+tools/package*.json
+tools/mdi.css
+
+pkg-lock.json
+pkg/
+
