@@ -48,8 +48,11 @@ struct DotGauge {
 };
 DotGauge gPm;
 
-struct Tile { lv_obj_t* value = nullptr; lv_obj_t* unit = nullptr;
-              lv_obj_t* status = nullptr; };
+struct Tile {
+  lv_obj_t* value = nullptr;
+  lv_obj_t* unit = nullptr;
+  lv_obj_t* status = nullptr;
+};
 Tile tTemp, tHum, tTvoc, tNox, tPm1, tPm10, tPm003;
 
 // ---- center label block shared by both gauges --------------------------
@@ -131,8 +134,8 @@ void makeDots(int cx, int cy, int dia, const char* name, const char* unit,
   lv_obj_set_style_border_width(gPm.badge, 0, 0);
   lv_obj_set_style_pad_all(gPm.badge, 0, 0);
   lv_obj_clear_flag(gPm.badge, LV_OBJ_FLAG_SCROLLABLE);
-  gPm.badgeSym = theme::label(gPm.badge, &lv_font_montserrat_18,
-                              lv_color_white());
+  gPm.badgeSym =
+      theme::label(gPm.badge, &lv_font_montserrat_18, lv_color_white());
   lv_obj_center(gPm.badgeSym);
 }
 
@@ -153,10 +156,16 @@ Tile makeTile(int x, int y, int w, int h, const char* name, const char* unit) {
 }
 
 void fmt1(char* b, size_t n, float v) {
-  if (isnan(v)) snprintf(b, n, "--"); else snprintf(b, n, "%.1f", v);
+  if (isnan(v))
+    snprintf(b, n, "--");
+  else
+    snprintf(b, n, "%.1f", v);
 }
 void fmt0(char* b, size_t n, float v) {
-  if (isnan(v)) snprintf(b, n, "--"); else snprintf(b, n, "%.0f", v);
+  if (isnan(v))
+    snprintf(b, n, "--");
+  else
+    snprintf(b, n, "%.0f", v);
 }
 
 void setArc(ArcGauge& g, float v, Band band) {
@@ -214,7 +223,9 @@ lv_obj_t* build() {
   makeArc(180, 214, 300, "CO2", "ppm", 0, 2000);
   makeDots(490, 214, 300, "PM2.5", "\xC2\xB5g/m\xC2\xB3", 0, 100);
 
-  tTemp = makeTile(648, 50, 150, 150, "TEMP", "\xC2\xB0""C");
+  tTemp = makeTile(648, 50, 150, 150, "TEMP",
+                   "\xC2\xB0"
+                   "C");
   tHum = makeTile(802, 50, 150, 150, "HUMIDITY", "%");
   tTvoc = makeTile(648, 206, 150, 150, "TVOC", "idx");
   tNox = makeTile(802, 206, 150, 150, "NOX", "idx");

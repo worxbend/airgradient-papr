@@ -11,7 +11,7 @@ struct HealthStats {
   volatile uint32_t pollCount = 0;
   volatile uint32_t consecutiveFail = 0;
   volatile uint32_t lastOkMs = 0;
-  volatile int      rssi = 0;
+  volatile int rssi = 0;
   volatile uint32_t fullRefreshes = 0;
   volatile uint32_t partialRefreshes = 0;
   char sensorFirmware[20] = {0};

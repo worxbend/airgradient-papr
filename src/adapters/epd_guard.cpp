@@ -6,7 +6,8 @@
 
 namespace adapters {
 
-static constexpr size_t kFbBytes = (size_t)EPD_WIDTH / 2 * EPD_HEIGHT;  // 259200
+static constexpr size_t kFbBytes =
+    (size_t)EPD_WIDTH / 2 * EPD_HEIGHT;  // 259200
 
 bool EpdGuard::init() {
   epd_init();
@@ -44,7 +45,10 @@ void EpdGuard::markDirty(int x, int y, int w, int h) {
   if (y1 > H) y1 = H;
   if (x1 <= x || y1 <= y) return;
   if (!dirty_) {
-    dx0_ = x; dy0_ = y; dx1_ = x1; dy1_ = y1;
+    dx0_ = x;
+    dy0_ = y;
+    dx1_ = x1;
+    dy1_ = y1;
     dirty_ = true;
   } else {
     if (x < dx0_) dx0_ = x;
@@ -132,7 +136,8 @@ void EpdGuard::repairRoutine(int cycles) {
 }
 
 void EpdGuard::powerOffForSleep() {
-  epd_poweroff_all();  // rails + peripherals down (§6.1.3) — battery + panel fix
+  epd_poweroff_all();  // rails + peripherals down (§6.1.3) — battery + panel
+                       // fix
 }
 
 void EpdGuard::markCleanShutdown() {

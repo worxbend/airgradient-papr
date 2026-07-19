@@ -1,9 +1,10 @@
 // src/ui/pages/currency.cpp — exchange rates + 30-day USD/UAH chart.
+#include "domain/currency.hpp"
+
 #include <Arduino.h>
 #include <lvgl.h>
 #include <math.h>
 
-#include "domain/currency.hpp"
 #include "ui/fonts/fonts.hpp"
 #include "ui/pages.hpp"
 #include "ui/theme.hpp"
@@ -16,10 +17,12 @@ lv_obj_t* scr = nullptr;
 lv_obj_t* hdrRight = nullptr;
 lv_obj_t* chart = nullptr;
 lv_chart_series_t* series = nullptr;
-lv_obj_t* chartHi = nullptr;   // max label
-lv_obj_t* chartLo = nullptr;   // min label
+lv_obj_t* chartHi = nullptr;  // max label
+lv_obj_t* chartLo = nullptr;  // min label
 
-struct Row { lv_obj_t* value; };
+struct Row {
+  lv_obj_t* value;
+};
 Row rUsd, rEur, rCny, rBtc, rEth;
 
 Row makeRow(int y, const char* code, const char* name) {
@@ -58,12 +61,12 @@ lv_obj_t* build() {
   lv_obj_set_style_bg_opa(chart, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(chart, 0, 0);
   lv_obj_set_style_line_color(chart, lv_color_hex(0xB0B0B0), LV_PART_MAIN);
-  lv_obj_set_style_width(chart, 0, LV_PART_INDICATOR);   // hide point markers
+  lv_obj_set_style_width(chart, 0, LV_PART_INDICATOR);  // hide point markers
   lv_obj_set_style_height(chart, 0, LV_PART_INDICATOR);
   lv_obj_set_style_line_width(chart, 3, LV_PART_ITEMS);
   lv_obj_clear_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
-  series = lv_chart_add_series(chart, lv_color_black(),
-                               LV_CHART_AXIS_PRIMARY_Y);
+  series =
+      lv_chart_add_series(chart, lv_color_black(), LV_CHART_AXIS_PRIMARY_Y);
 
   chartHi = theme::label(cCard, &font_status_22);
   lv_obj_align(chartHi, LV_ALIGN_TOP_RIGHT, 0, 22);

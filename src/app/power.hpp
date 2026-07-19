@@ -11,6 +11,6 @@ namespace app {
 inline constexpr float kBatteryLowV = 3.4f;
 
 float batteryVoltage();  // volts (0 if no divider / not readable)
-int   batteryPercent();  // 0..100, clamped
+int batteryPercent();    // 0..100, clamped
 
 }  // namespace app

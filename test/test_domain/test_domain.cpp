@@ -76,8 +76,8 @@ void test_ring_wraps_and_minmax() {
 void test_hero_picks_worst() {
   Measurement m;
   m.valid = true;
-  m.rco2 = 1800;   // Hazardous -> should win
-  m.pm02 = 5;      // Good
+  m.rco2 = 1800;  // Hazardous -> should win
+  m.pm02 = 5;     // Good
   m.tvocIndex = 100;
   m.noxIndex = 1;
   m.atmp = 22;

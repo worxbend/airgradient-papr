@@ -1,11 +1,12 @@
 // src/ui/pages/weather.cpp — combined outdoor page: current + UV + forecast.
 // Three bands: [NOW | AIR | UV]  /  HOURLY row  /  3-DAY range bars.
+#include "domain/weather.hpp"
+
 #include <Arduino.h>
 #include <lvgl.h>
 #include <math.h>
 #include <time.h>
 
-#include "domain/weather.hpp"
 #include "ui/fonts/fonts.hpp"
 #include "ui/pages.hpp"
 #include "ui/theme.hpp"
@@ -31,12 +32,20 @@ lv_obj_t* uvBand = nullptr;
 lv_obj_t* uvMax = nullptr;
 lv_obj_t* uvWin = nullptr;
 
-struct HourCol { lv_obj_t* label; lv_obj_t* t; lv_obj_t* uv; };
+struct HourCol {
+  lv_obj_t* label;
+  lv_obj_t* t;
+  lv_obj_t* uv;
+};
 HourCol hc[8];
 
 struct DayRow {
-  lv_obj_t* name; lv_obj_t* lo; lv_obj_t* hi; lv_obj_t* cond;
-  lv_obj_t* track; lv_obj_t* fill;
+  lv_obj_t* name;
+  lv_obj_t* lo;
+  lv_obj_t* hi;
+  lv_obj_t* cond;
+  lv_obj_t* track;
+  lv_obj_t* fill;
 };
 DayRow dr[3];
 

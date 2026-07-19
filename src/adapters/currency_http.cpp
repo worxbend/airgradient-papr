@@ -105,8 +105,7 @@ bool CurrencyHttp::fetch(domain::Currency& out) {
       JsonDocument filter;
       filter[0]["rate"] = true;
       JsonDocument doc;
-      if (!deserializeJson(doc, body,
-                           DeserializationOption::Filter(filter))) {
+      if (!deserializeJson(doc, body, DeserializationOption::Filter(filter))) {
         for (JsonObject o : doc.as<JsonArray>()) {
           if (c.histCount >= domain::kHistMax) break;
           float r = o["rate"] | NAN;

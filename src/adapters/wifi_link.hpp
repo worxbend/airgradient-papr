@@ -17,7 +17,7 @@ class WifiLink {
   bool ensureConnected();
 
   bool connected() const;
-  int  rssi() const;
+  int rssi() const;
   uint32_t failures() const { return failures_; }
 
  private:

@@ -10,7 +10,9 @@ namespace adapters {
 static constexpr int kBufLines = 54;
 static constexpr size_t kBufBytes = (size_t)EpdGuard::W * kBufLines;
 
-static uint32_t tickCb() { return (uint32_t)millis(); }
+static uint32_t tickCb() {
+  return (uint32_t)millis();
+}
 
 static void flushCb(lv_display_t* disp, const lv_area_t* area,
                     uint8_t* px_map) {

@@ -7,7 +7,8 @@ constexpr int Buttons::kPins[3];
 
 void Buttons::begin() {
   for (int i = 0; i < 3; ++i) {
-    pinMode(kPins[i], INPUT);  // 34/35/39 can't use INPUT_PULLUP; board pulls up
+    pinMode(kPins[i],
+            INPUT);  // 34/35/39 can't use INPUT_PULLUP; board pulls up
     lastRead_[i] = stable_[i] = true;
     tChange_[i] = millis();
   }
