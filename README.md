@@ -16,6 +16,15 @@
 
 <img src="docs/assets/showcase-main.png" width="760" alt="airdeck main page: CO2 arc gauge + PM2.5 dotted ring + tiles">
 
+<br><br>
+
+<a href="https://youtu.be/1xlhLZY1_Wo" title="Watch airdeck in action">
+  <img src="https://img.youtube.com/vi/1xlhLZY1_Wo/maxresdefault.jpg" width="560" alt="▶ Watch airdeck in action (YouTube)">
+</a>
+
+<br>
+<sub>▶️ <a href="https://youtu.be/1xlhLZY1_Wo"><strong>Watch it run</strong></a> — 60-second demo</sub>
+
 </div>
 
 ---
@@ -165,10 +174,21 @@ Every push gets put through its paces by GitHub Actions:
 ## <img src="docs/assets/icons/box.svg" width="26" align="top"> &nbsp;Enclosure 📦
 
 <div align="center">
-<img src="docs/assets/showcase-case.png" width="620" alt="airdeck desk-stand enclosure (CAD render)">
+<img src="docs/assets/final-1.jpg" width="380" alt="airdeck final build — angled desk-stand enclosure, front">
+&nbsp;
+<img src="docs/assets/final-2.jpg" width="380" alt="airdeck final build — dashboard live on the desk">
+<br>
+<sub><em>The finished build — printed, wired, and reading the room. 🖨️</em></sub>
 </div>
 
-A slick, angled desk-stand case is in the works. **FreeCAD source + print-ready `.3mf`** are coming soon™ — they'll live in `hardware/`. Print it, prop it on your desk, glance away. 🖨️
+<details>
+<summary>CAD render</summary>
+<div align="center">
+<img src="docs/assets/showcase-case.png" width="620" alt="airdeck desk-stand enclosure (CAD render)">
+</div>
+</details>
+
+A slick, angled desk-stand case. **FreeCAD source + print-ready `.3mf`** are coming soon™ — they'll live in `hardware/`. Print it, prop it on your desk, glance away. 🖨️
 
 ---
 
