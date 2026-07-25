@@ -15,6 +15,8 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <esp_system.h>
+#include <esp_task_wdt.h>
 #include <lvgl.h>
 #include <time.h>
 
@@ -45,26 +47,46 @@ static lv_display_t* g_disp = nullptr;
 
 // clearPanel=false preserves the on-panel image across a battery timer wake
 // (see EpdGuard::init); the USB profile always clears.
+//
+// Each step is a hard prerequisite for the next, so a failure returns
+// immediately instead of carrying on with a null framebuffer — LVGL would then
+// flush straight through a null pointer on the first render.
 static bool bringUpDisplay(bool clearPanel = true) {
-  bool ok = true;
   if (!psramFound()) {
     Serial.println("[fatal] PSRAM not found — check board/build flags");
-    ok = false;
-  } else {
-    Serial.printf("[boot] PSRAM: %u bytes free\n",
-                  (unsigned)ESP.getFreePsram());
+    return false;
   }
+  Serial.printf("[boot] PSRAM: %u bytes free\n", (unsigned)ESP.getFreePsram());
+
   if (!g_guard.init(clearPanel)) {
     Serial.println("[fatal] EPD framebuffer alloc failed");
-    ok = false;
+    return false;
   }
+  g_guard.setRefreshLimits(cfg::kMinRefreshIntervalSeconds * 1000UL,
+                           cfg::kForcedRefreshMinSeconds * 1000UL);
+
   g_disp = adapters::epdLvglInit(&g_guard);
   if (!g_disp) {
     Serial.println("[fatal] LVGL display init failed");
-    ok = false;
+    return false;
   }
   ui::build();
-  return ok;
+  return true;
+}
+
+static const char* resetReasonName(esp_reset_reason_t r) {
+  switch (r) {
+    case ESP_RST_POWERON: return "power-on";
+    case ESP_RST_EXT: return "external";
+    case ESP_RST_SW: return "software";
+    case ESP_RST_PANIC: return "panic";
+    case ESP_RST_INT_WDT: return "int-wdt";
+    case ESP_RST_TASK_WDT: return "task-wdt";
+    case ESP_RST_WDT: return "other-wdt";
+    case ESP_RST_DEEPSLEEP: return "deep-sleep";
+    case ESP_RST_BROWNOUT: return "brownout";
+    default: return "unknown";
+  }
 }
 
 // ===========================================================================
@@ -72,6 +94,19 @@ static bool bringUpDisplay(bool clearPanel = true) {
 // ===========================================================================
 static QueueHandle_t g_mailbox = nullptr;
 static app::Buttons g_buttons;
+
+// Hold off starting a fetch while the panel is mid-refresh. `epd_draw_image`
+// spawns two 8 KB tasks per frame (15 frames); if a 40 KB mbedTLS handshake or
+// a chunked-response String lands in that window, xTaskCreate fails and the
+// driver blocks forever on `xSemaphoreTake(..., portMAX_DELAY)` with the rails
+// still energised. A refresh takes ~1 s and now happens at most once a minute,
+// so waiting for it costs nothing. Bounded so a stuck flag can't wedge the net
+// task in turn.
+static void waitForPanelIdle(uint32_t maxWaitMs = 5000) {
+  uint32_t t0 = millis();
+  while (adapters::panelBusy() && (uint32_t)(millis() - t0) < maxWaitMs)
+    vTaskDelay(pdMS_TO_TICKS(20));
+}
 
 static void fetchWeather(adapters::WeatherHttp& wx, app::Snapshot& snap,
                          bool& geoDone, double& lat, double& lon) {
@@ -118,6 +153,8 @@ static void netTask(void*) {
   bool geoDone = false;
   double lat = 0, lon = 0;
   for (;;) {
+    app::g_health.netTickMs = millis();  // liveness beacon (watched by loop())
+
     bool connected = wifi.ensureConnected();
     snap.rssi = wifi.rssi();
     app::g_health.rssi = snap.rssi;
@@ -137,6 +174,7 @@ static void netTask(void*) {
     if (lastWeather == 0 ||
         nowW - lastWeather >= cfg::kWeatherPollSeconds * 1000UL) {
       lastWeather = nowW;
+      waitForPanelIdle();
       fetchWeather(wx, snap, geoDone, lat, lon);
       xQueueOverwrite(g_mailbox, &snap);
     }
@@ -147,6 +185,7 @@ static void netTask(void*) {
         (lastCurrency != 0 &&
          nowC - lastCurrency >= cfg::kCurrencyPollSeconds * 1000UL)) {
       lastCurrency = nowC;
+      waitForPanelIdle();
       domain::Currency cc;
       if (currency.fetch(cc)) {
         snap.currency = cc;
@@ -163,6 +202,7 @@ static void netTask(void*) {
     uint32_t now = millis();
     if (lastPoll == 0 || now - lastPoll >= cfg::kPollSeconds * 1000UL) {
       lastPoll = now;
+      waitForPanelIdle();
       domain::Measurement m;
       if (source.poll(m)) {
         snap.m = m;
@@ -201,21 +241,47 @@ static void netTask(void*) {
 void setup() {
   Serial.begin(115200);
   delay(200);
-  Serial.println("\n[airdeck] boot (USB profile)");
-  bringUpDisplay();
+  const esp_reset_reason_t why = esp_reset_reason();
+  app::g_health.resetReason = (uint32_t)why;
+  Serial.printf("\n[airdeck] boot (USB profile) — last reset: %s\n",
+                resetReasonName(why));
+
+  if (!bringUpDisplay()) {
+    // Nothing can be drawn and nothing can be fetched usefully. Park here
+    // loudly rather than crash-looping through a null framebuffer; the task
+    // watchdog is deliberately not armed yet, so this stays parked for
+    // inspection instead of rebooting into the same failure forever.
+    for (;;) {
+      Serial.println("[fatal] display bring-up failed — halted");
+      delay(10000);
+    }
+  }
   lv_timer_handler();  // render the (empty-state) main page now, while heap is
                        // high
 
   g_buttons.begin();
   g_mailbox = xQueueCreate(1, sizeof(app::Snapshot));
+  app::g_health.netTickMs = millis();  // seed before the watcher can fire
   // 16 KB stack: mbedTLS (HTTPS weather fetch) needs the headroom.
   xTaskCreatePinnedToCore(netTask, "net", 16384, nullptr, 4, nullptr, 0);
-  Serial.printf("[boot] heap free: %u\n", (unsigned)ESP.getFreeHeap());
+
+  // Hardware task watchdog on the UI task. The panel driver's per-frame
+  // xTaskCreate can fail on a fragmented heap and then block forever on a
+  // semaphore — historically the "needs a manual reset" freeze. With this
+  // armed, that deadlock reboots the board in kWatchdogSeconds instead.
+  esp_task_wdt_init(cfg::kWatchdogSeconds, /*panic=*/true);
+  esp_task_wdt_add(nullptr);  // subscribe the Arduino loop task
+  Serial.printf("[boot] heap free: %u  wdt: %lus\n", (unsigned)ESP.getFreeHeap(),
+                (unsigned long)cfg::kWatchdogSeconds);
 }
 
 void loop() {
   static app::Snapshot snap;
-  static uint32_t lastRefresh = 0;
+  static uint32_t lastUiTick = 0;
+  static uint32_t lastDeGhost = 0;
+
+  esp_task_wdt_reset();
+
   app::Snapshot incoming;
   if (xQueueReceive(g_mailbox, &incoming, 0) == pdTRUE) {
     snap = incoming;
@@ -223,11 +289,20 @@ void loop() {
     ui::update(snap);
   }
 
-  // Periodic whole-page refresh: keep time-based fields current and give the
-  // panel a clean redraw at a fixed interval, on whatever page is showing.
-  if (millis() - lastRefresh >= cfg::kPageRefreshSeconds * 1000UL) {
-    lastRefresh = millis();
+  // Recompute the page models (clock, "last seen", bands). Pure CPU — this does
+  // NOT drive the panel. Labels that didn't change don't invalidate, so a tick
+  // where nothing moved leaves the framebuffer clean and costs no refresh.
+  if ((uint32_t)(millis() - lastUiTick) >= cfg::kUiTickSeconds * 1000UL) {
+    lastUiTick = millis();
     ui::update(snap);
+  }
+
+  // De-ghost backstop: repaint the whole page periodically even if every label
+  // is unchanged, to clear e-paper particle memory.
+  if (cfg::kDeGhostRefreshSeconds &&
+      (uint32_t)(millis() - lastDeGhost) >=
+          cfg::kDeGhostRefreshSeconds * 1000UL) {
+    lastDeGhost = millis();
     ui::refreshCurrent();
   }
 
@@ -246,9 +321,42 @@ void loop() {
       break;
   }
 
+  // De-ghost on demand (GET /repair). The endpoint runs on the net task and only
+  // raises a flag; the panel work happens here, on the task that owns it.
+  if (adapters::netServicesTakeRepairRequest()) {
+    Serial.println("[epd] de-ghost requested — running repair routine");
+    if (!g_guard.repairRoutine()) Serial.println("[epd] repair: alloc failed");
+    ui::refreshCurrent();  // repaint over the white the routine leaves behind
+  }
+
+  // A page switch is an explicit interaction — let it jump the once-per-minute
+  // data-refresh queue (still floored by kForcedRefreshMinSeconds). Flag it
+  // BEFORE the render so the flush_cb's present() already sees the priority.
+  if (ui::takePageChanged()) g_guard.requestForce();
+
+  lv_timer_handler();  // renders into the framebuffer; present() gates the push
+
+  // Retry any push an earlier gate deferred (rate limit, heap, temperature).
+  g_guard.tick();
+
   app::g_health.fullRefreshes = g_guard.fullRefreshes();
-  app::g_health.partialRefreshes = g_guard.partialRefreshes();
-  lv_timer_handler();
+  app::g_health.refreshDeferredRate = g_guard.deferredRateLimit();
+  app::g_health.refreshDeferredHeap = g_guard.deferredLowHeap();
+  app::g_health.refreshDeferredTemp = g_guard.deferredTemp();
+  app::g_health.lastRefreshMs = g_guard.lastRefreshMs();
+  app::g_health.maxRefreshMs = g_guard.maxRefreshMs();
+
+  // Net-task stall watchdog. The task WDT only covers this task; a socket or
+  // TLS session wedged inside HTTPClient would otherwise leave a healthy-looking
+  // but permanently stale screen with no way out but the reset button.
+  const uint32_t netAge = (uint32_t)(millis() - app::g_health.netTickMs);
+  if (netAge > cfg::kNetStallRebootSeconds * 1000UL) {
+    Serial.printf("[fatal] net task stalled %lus — rebooting\n",
+                  (unsigned long)(netAge / 1000));
+    Serial.flush();
+    esp_restart();
+  }
+
   delay(5);
 }
 
@@ -306,12 +414,21 @@ static void sleepFor(uint32_t seconds) {
 void setup() {
   Serial.begin(115200);
   delay(200);
+  app::g_health.resetReason = (uint32_t)esp_reset_reason();
   Serial.println("\n[airdeck] wake (battery profile)");
 
   // A cold boot (power-on / reset) clears the panel; a timer wake keeps the
   // existing image so an unchanged reading can skip the refresh entirely.
   const bool coldBoot = esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_TIMER;
-  bringUpDisplay(/*clearPanel=*/coldBoot);
+  if (!bringUpDisplay(/*clearPanel=*/coldBoot)) {
+    // Nothing to draw with. Don't touch the (uninitialised) panel rails — just
+    // sleep out the normal interval and retry from a fresh boot.
+    Serial.println("[fatal] display bring-up failed — sleeping");
+    Serial.flush();
+    esp_sleep_enable_timer_wakeup((uint64_t)cfg::kBatteryPollSeconds *
+                                  1000000ULL);
+    esp_deep_sleep_start();
+  }
 
   float vbat = app::batteryVoltage();
   Serial.printf("[batt] %.2f V (%d%%)\n", vbat, app::batteryPercent());

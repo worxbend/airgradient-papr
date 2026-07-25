@@ -30,13 +30,18 @@ not for milliamps:
 
 - **Both cores run continuously.** Core 0 polls the network; core 1 renders.
 - `WiFi.setSleep(false)` — the radio never naps, so polls are snappy.
-- The screen updates whenever new data arrives, and a periodic whole-page
-  refresh (`kPageRefreshSeconds`, default 30 s) keeps the clock current and
-  gives the panel a clean redraw.
+- The page models are recomputed every `kUiTickSeconds` (15 s) — CPU only — and
+  the panel is pushed **at most once per `kMinRefreshIntervalSeconds` (60 s)**,
+  and only when something on screen actually changed. A page switch bypasses that
+  floor (`kForcedRefreshMinSeconds`, 3 s) so buttons feel instant, and
+  `kDeGhostRefreshSeconds` (hourly) forces a clean repaint. See
+  [ch. 03 → How often may we refresh?](03-epaper-deep-dive.md).
 - The chip **never** deep-sleeps.
 
 Power here is dominated by the Wi-Fi radio (tens of mA) and is simply not a
-concern — you're plugged in.
+concern — you're plugged in. The refresh floor is therefore about the *panel*,
+not the battery: each update is ~47 panel frames at up to 950 mW and ~1 s of
+blocked UI task.
 
 ## Profile B — battery deep-sleep
 

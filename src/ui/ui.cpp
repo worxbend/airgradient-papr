@@ -21,6 +21,7 @@ lv_obj_t* splashStatus = nullptr;
 
 int cur = PAGE_AQ;
 bool ready = false;
+bool pageChanged = false;  // consumed by takePageChanged()
 uint32_t splashStart = 0;
 constexpr uint32_t kSplashTimeoutMs = 45000;
 
@@ -55,6 +56,7 @@ void loadCurrent() {
   if (lv_screen_active() != pages[cur]) lv_screen_load(pages[cur]);
   updatePaging();
   lv_obj_invalidate(pages[cur]);  // full refresh on switch
+  pageChanged = true;             // user-priority push, not a data refresh
 }
 
 void buildSplash() {
@@ -135,8 +137,9 @@ void build() {
   buildSplash();
 
   app::Snapshot empty;
-  update(empty);  // seed page fallbacks
-  ready = false;  // (update() may have flipped it on the empty seed)
+  update(empty);       // seed page fallbacks
+  ready = false;       // (update() may have flipped it on the empty seed)
+  pageChanged = false;  // ...and with it, marked a page switch
   cur = PAGE_AQ;
   splashStart = millis();
   lv_screen_load(splash);
@@ -152,7 +155,10 @@ void showMessage(const char* title, const char* line1, const char* line2) {
   (void)title;
   (void)line2;
   if (splashStatus) theme::setText(splashStatus, line1 ? line1 : "");
-  if (lv_screen_active() != splash) lv_screen_load(splash);
+  if (lv_screen_active() != splash) {
+    lv_screen_load(splash);
+    pageChanged = true;
+  }
 }
 
 void nextPage() {
@@ -176,6 +182,12 @@ int currentPage() {
 
 void refreshCurrent() {
   if (ready) lv_obj_invalidate(pages[cur]);
+}
+
+bool takePageChanged() {
+  bool v = pageChanged;
+  pageChanged = false;
+  return v;
 }
 
 }  // namespace ui

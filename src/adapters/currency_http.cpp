@@ -2,43 +2,21 @@
 #include "adapters/currency_http.hpp"
 
 #include <ArduinoJson.h>
-#include <HTTPClient.h>
-#include <WiFiClientSecure.h>
 #include <time.h>
 
 #include "app/clock.hpp"
 
 namespace adapters {
 
-bool CurrencyHttp::tlsGet(const char* url, String& body, uint32_t timeoutMs) {
-  for (int attempt = 0; attempt < 3; ++attempt) {
-    WiFiClientSecure client;
-    client.setInsecure();
-    client.setHandshakeTimeout(12);
-    HTTPClient http;
-    http.setConnectTimeout(6000);
-    http.setTimeout(timeoutMs);
-    if (!http.begin(client, url)) {
-      strlcpy(err_, "begin failed", sizeof(err_));
-      delay(400);
-      continue;
-    }
-    int code = http.GET();
-    if (code == HTTP_CODE_OK) {
-      body = http.getString();
-      http.end();
-      return !body.isEmpty();
-    }
-    snprintf(err_, sizeof(err_), "http %d", code);
-    http.end();
-    delay(500);
-  }
-  return false;
+bool CurrencyHttp::tlsGet(const char* url, PsramBody& body, uint32_t timeoutMs) {
+  return httpGetToPsram(url, body, /*tls=*/true, /*connectTimeoutMs=*/6000,
+                        timeoutMs, /*attempts=*/3, /*userAgent=*/nullptr, err_,
+                        sizeof(err_));
 }
 
 bool CurrencyHttp::fetch(domain::Currency& out) {
   domain::Currency c;
-  String body;
+  PsramBody body;  // reused across all three requests; clear()ed per attempt
 
   // ---- NBU current rates (USD/EUR/CNY in UAH) ----
   if (!tlsGet("https://bank.gov.ua/NBUStatService/v1/statdirectory/"
@@ -57,8 +35,9 @@ bool CurrencyHttp::fetch(domain::Currency& out) {
     f["cc"] = true;
     f["rate"] = true;
     f["exchangedate"] = true;
-    JsonDocument doc;
-    if (deserializeJson(doc, body, DeserializationOption::Filter(filter))) {
+    JsonDocument doc(&psramJson());
+    if (deserializeJson(doc, body.c_str(), body.length(),
+                        DeserializationOption::Filter(filter))) {
       strlcpy(err_, "nbu parse", sizeof(err_));
       return false;
     }
@@ -83,8 +62,8 @@ bool CurrencyHttp::fetch(domain::Currency& out) {
   if (tlsGet("https://api.coingecko.com/api/v3/simple/"
              "price?ids=bitcoin,ethereum&vs_currencies=usd",
              body)) {
-    JsonDocument doc;
-    if (!deserializeJson(doc, body)) {
+    JsonDocument doc(&psramJson());
+    if (!deserializeJson(doc, body.c_str(), body.length())) {
       c.btcUsd = doc["bitcoin"]["usd"] | NAN;
       c.ethUsd = doc["ethereum"]["usd"] | NAN;
     }
@@ -110,8 +89,9 @@ bool CurrencyHttp::fetch(domain::Currency& out) {
     if (tlsGet(url, body)) {
       JsonDocument filter;
       filter[0]["rate"] = true;
-      JsonDocument doc;
-      if (!deserializeJson(doc, body, DeserializationOption::Filter(filter))) {
+      JsonDocument doc(&psramJson());
+      if (!deserializeJson(doc, body.c_str(), body.length(),
+                           DeserializationOption::Filter(filter))) {
         for (JsonObject o : doc.as<JsonArray>()) {
           if (c.histCount >= domain::kHistMax) break;
           float r = o["rate"] | NAN;

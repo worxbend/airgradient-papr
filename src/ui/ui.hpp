@@ -29,7 +29,13 @@ void prevPage();
 void gotoMain();
 int currentPage();
 
-// Force a clean full redraw of the currently shown page (interval refresh).
+// Force a clean full redraw of the currently shown page (de-ghost backstop).
 void refreshCurrent();
+
+// True once if the visible page changed since the last call (page switch, or
+// the splash -> dashboard hand-off). The composition root uses this to ask the
+// EPD guard for a user-priority push, so an explicit interaction isn't held
+// back by the once-per-minute data-refresh floor.
+bool takePageChanged();
 
 }  // namespace ui

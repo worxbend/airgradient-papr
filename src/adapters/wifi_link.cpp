@@ -32,8 +32,14 @@ bool WifiLink::ensureConnected() {
     return true;
   }
 
+  // Rollover-safe "is the backoff over?". A plain `now < nextAttemptAt_` breaks
+  // at the 49.7-day millis() wrap: with a deadline near UINT32_MAX and `now`
+  // freshly wrapped to a small value the comparison stays true, so the link
+  // would refuse to retry for another ~49 days — a board that had been up for
+  // weeks would simply stop reconnecting. Comparing the *difference* as a
+  // signed value is correct across the wrap.
   uint32_t now = millis();
-  if (now < nextAttemptAt_) return false;  // still backing off
+  if ((int32_t)(now - nextAttemptAt_) < 0) return false;  // still backing off
 
   WiFi.disconnect(true, false);
   delay(50);

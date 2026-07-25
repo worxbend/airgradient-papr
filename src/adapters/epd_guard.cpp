@@ -3,18 +3,34 @@
 
 #include <Preferences.h>
 #include <esp_heap_caps.h>
+#include <esp_task_wdt.h>
 
 namespace adapters {
 
 static constexpr size_t kFbBytes =
     (size_t)EPD_WIDTH / 2 * EPD_HEIGHT;  // 259200
 
+// Set for the whole time the rails are up and the driver's worker tasks run.
+// Read (never written) by the net task — a plain volatile bool is enough for a
+// one-writer/one-reader flag on ESP32.
+static volatile bool g_panelBusy = false;
+
+bool panelBusy() {
+  return g_panelBusy;
+}
+
+// Largest single internal (DRAM) block. This — not total free heap — is what
+// `xTaskCreate` needs for the driver's 8 KB per-frame worker stacks.
+static uint32_t largestInternalBlock() {
+  return (uint32_t)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL |
+                                                    MALLOC_CAP_8BIT);
+}
+
 bool EpdGuard::init(bool clearOnBoot) {
   epd_init();
 
   fb_ = (uint8_t*)heap_caps_malloc(kFbBytes, MALLOC_CAP_SPIRAM);
-  scratch_ = (uint8_t*)heap_caps_malloc(kFbBytes, MALLOC_CAP_SPIRAM);
-  if (!fb_ || !scratch_) return false;
+  if (!fb_) return false;
   memset(fb_, 0xFF, kFbBytes);  // 0xF nibbles = white
 
   // Boot hygiene (§6.1.4): if the previous run didn't flag a clean shutdown,
@@ -29,6 +45,7 @@ bool EpdGuard::init(bool clearOnBoot) {
   // clear here would both waste a waveform and destroy the pixels a skipped
   // refresh means to preserve). Every other case starts from a clean panel.
   if (clearOnBoot || !wasClean) {
+    g_panelBusy = true;
     epd_poweron();
     epd_clear();
     if (!wasClean) {
@@ -36,10 +53,15 @@ bool EpdGuard::init(bool clearOnBoot) {
       epd_draw_grayscale_image(epd_full_screen(), fb_);
     }
     epd_poweroff();
+    g_panelBusy = false;
   }
 
-  lastFullMs_ = millis();
   return true;
+}
+
+void EpdGuard::setRefreshLimits(uint32_t minMs, uint32_t forcedMinMs) {
+  minIntervalMs_ = minMs;
+  forcedMinIntervalMs_ = forcedMinMs;
 }
 
 void EpdGuard::markDirty(int x, int y, int w, int h) {
@@ -63,87 +85,149 @@ void EpdGuard::markDirty(int x, int y, int w, int h) {
   }
 }
 
+bool EpdGuard::rateLimitAllows() const {
+  if (!havePresented_) return true;  // never delay the very first frame
+  const uint32_t need = pendingForce_ ? forcedMinIntervalMs_ : minIntervalMs_;
+  // Unsigned subtraction — correct across the 49.7-day millis() wrap.
+  return (uint32_t)(millis() - lastPresentMs_) >= need;
+}
+
+uint32_t EpdGuard::msUntilAllowed() const {
+  if (!havePresented_) return 0;
+  const uint32_t need = pendingForce_ ? forcedMinIntervalMs_ : minIntervalMs_;
+  const uint32_t since = (uint32_t)(millis() - lastPresentMs_);
+  return since >= need ? 0 : need - since;
+}
+
+void EpdGuard::setAmbientTempC(float c) {
+  tempC_ = c;
+  tempSetMs_ = millis();
+}
+
+// True when the ambient proxy says it is unsafe to drive a waveform. A reading
+// older than kTempStaleMs is treated as no reading at all — see the header.
+bool EpdGuard::tempClampBlocks() {
+  const bool fresh =
+      !isnan(tempC_) && (uint32_t)(millis() - tempSetMs_) < kTempStaleMs;
+  const bool blocks =
+      fresh && (tempC_ < kMinSafeTempC || tempC_ > kMaxSafeTempC);
+  if (blocks != tempBlocking_) {  // edge only — this would spam every loop pass
+    tempBlocking_ = blocks;
+    if (blocks)
+      Serial.printf("[epd] temperature clamp ON (%.1fC outside %.0f..%.0f) — "
+                    "holding the last image\n",
+                    tempC_, kMinSafeTempC, kMaxSafeTempC);
+    else
+      Serial.println("[epd] temperature clamp OFF — refreshing again");
+  }
+  return blocks;
+}
+
 void EpdGuard::present(bool forceFull) {
-  if (!dirty_ && !forceFull) return;
+  if (forceFull) pendingForce_ = true;
+  if (!dirty_ && !pendingForce_) return;
+
+  // Rate limit (the once-per-minute rule). The framebuffer already holds the
+  // newest image and `dirty_` stays set, so tick() re-enters here and pushes
+  // the *latest* content the moment the interval expires — deferring costs
+  // freshness, never content.
+  if (!rateLimitAllows()) {
+    deferredRate_++;
+    return;
+  }
 
   // Temperature clamp (§6.1.5): refuse refreshes outside the panel's safe
   // range; keep the last image (costs nothing) and retry when back in range.
-  if (!isnan(tempC_) && (tempC_ < kMinSafeTempC || tempC_ > kMaxSafeTempC))
+  if (tempClampBlocks()) {
+    deferredTemp_++;
     return;
+  }
 
   // Heap gate: epd_draw_* spawns 8 KB worker tasks per frame; if internal heap
   // is momentarily low (a TLS/HTTP fetch holding a big buffer) that xTaskCreate
-  // fails and hangs on a semaphore. Defer — keep dirty_ set and retry when heap
-  // recovers (the interval refresh calls again shortly).
-  if (ESP.getFreeHeap() < kMinHeapForRefresh) return;
+  // fails and hangs on a semaphore. Both totals matter — enough free heap AND
+  // one contiguous block big enough for the stacks. Defer — keep dirty_ set and
+  // retry when heap recovers (tick() calls again shortly).
+  if (ESP.getFreeHeap() < kMinHeapForRefresh ||
+      largestInternalBlock() < kMinContiguousForRefresh) {
+    deferredHeap_++;
+    return;
+  }
 
   // Full refresh for every update (partial updates are disabled by request):
   // cleaner on this panel and avoids partial-refresh artifacts.
-  epd_poweron();  // high-voltage rails ON only during the update (§6.1.2)
+  const uint32_t t0 = millis();
+  g_panelBusy = true;  // net task holds off any big allocation until we're done
+  epd_poweron();       // high-voltage rails ON only during the update (§6.1.2)
   fullRefresh();
   epd_poweroff();  // rails OFF immediately; panel holds the image with no power
+  g_panelBusy = false;
 
+  lastRefreshDurMs_ = (uint32_t)(millis() - t0);
+  if (lastRefreshDurMs_ > maxRefreshDurMs_) maxRefreshDurMs_ = lastRefreshDurMs_;
+
+  lastPresentMs_ = millis();
+  havePresented_ = true;
+  pendingForce_ = false;
   dirty_ = false;
 }
 
 void EpdGuard::fullRefresh() {
   epd_clear();
   epd_draw_grayscale_image(epd_full_screen(), fb_);
-  partialCount_ = 0;
-  lastFullMs_ = millis();
   fullRefreshes_++;
-}
-
-void EpdGuard::partialRefresh() {
-  // Snap x to even boundaries so 4 bpp nibble packing stays byte-aligned.
-  int x0 = dx0_ & ~1;
-  int x1 = (dx1_ + 1) & ~1;
-  if (x1 > W) x1 = W;
-  int y0 = dy0_, y1 = dy1_;
-  int w = x1 - x0, h = y1 - y0;
-  if (w <= 0 || h <= 0) return;
-
-  const int srcStride = W / 2;
-  const int dstStride = w / 2;
-  for (int row = 0; row < h; ++row) {
-    memcpy(scratch_ + (size_t)row * dstStride,
-           fb_ + (size_t)(y0 + row) * srcStride + x0 / 2, dstStride);
-  }
-  Rect_t area = {x0, y0, w, h};
-  epd_clear_area(area);  // wipe ghosting in this card, then redraw it
-  epd_draw_grayscale_image(area, scratch_);
-  partialCount_++;
-  partialRefreshes_++;
 }
 
 void EpdGuard::clearWhite() {
   memset(fb_, 0xFF, kFbBytes);
+  g_panelBusy = true;
   epd_poweron();
   fullRefresh();
   epd_poweroff();
+  g_panelBusy = false;
+  lastPresentMs_ = millis();
+  havePresented_ = true;
 }
 
-void EpdGuard::repairRoutine(int cycles) {
+bool EpdGuard::repairRoutine(int cycles) {
   // §6.2: alternate full black/white GC16 frames to shift stuck particles.
+  //
+  // The solid-colour source buffer is allocated here and released immediately:
+  // it is a quarter-megabyte that used to sit in PSRAM for the whole uptime for
+  // the sake of a routine that runs seconds per year.
+  uint8_t* solid = (uint8_t*)heap_caps_malloc(kFbBytes, MALLOC_CAP_SPIRAM);
+  if (!solid) return false;
+
+  g_panelBusy = true;
   epd_poweron();
   for (int i = 0; i < cycles; ++i) {
+    esp_task_wdt_reset();  // ~2.5 s per cycle; keep the UI task's WDT fed
     epd_clear();
-    memset(scratch_, 0x00, kFbBytes);  // black
-    epd_draw_grayscale_image(epd_full_screen(), scratch_);
+    memset(solid, 0x00, kFbBytes);  // black
+    epd_draw_grayscale_image(epd_full_screen(), solid);
     delay(200);
     epd_clear();
-    memset(scratch_, 0xFF, kFbBytes);  // white
-    epd_draw_grayscale_image(epd_full_screen(), scratch_);
+    memset(solid, 0xFF, kFbBytes);  // white
+    epd_draw_grayscale_image(epd_full_screen(), solid);
     delay(200);
   }
   epd_poweroff();
-  partialCount_ = 0;
-  lastFullMs_ = millis();
+  g_panelBusy = false;
+  heap_caps_free(solid);
+
+  // The panel now holds white, not our framebuffer — force a repaint. Note we
+  // deliberately do NOT stamp lastPresentMs_: it still points at the push before
+  // the repair, which is already older than the forced floor, so the next tick()
+  // repaints immediately instead of leaving the user staring at a white screen.
+  dirty_ = true;
+  pendingForce_ = true;
+  return true;
 }
 
 void EpdGuard::powerOffForSleep() {
   epd_poweroff_all();  // rails + peripherals down (§6.1.3) — battery + panel
                        // fix
+  g_panelBusy = false;
 }
 
 void EpdGuard::markCleanShutdown() {

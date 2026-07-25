@@ -95,19 +95,44 @@ Once connected, the board serves JSON at `http://<board-ip>/health`. It's your
 window into the running system:
 
 ```json
-{ "uptime_s":…, "free_heap":…, "min_free_heap":…, "free_psram":…,
-  "rssi":…, "poll_count":…, "consecutive_fail":…, "last_poll_ago_s":…,
-  "full_refreshes":…, "partial_refreshes":…, "sensor_fw":"…", "ip":"…" }
+{ "uptime_s":…, "reset_reason":…, "free_heap":…, "min_free_heap":…,
+  "largest_free_block":…, "free_psram":…, "rssi":…, "poll_count":…,
+  "consecutive_fail":…, "last_poll_ago_s":…, "net_tick_ago_s":…,
+  "full_refreshes":…, "refresh_deferred_rate":…, "refresh_deferred_heap":…,
+  "refresh_deferred_temp":…, "last_refresh_ms":…, "max_refresh_ms":…,
+  "sensor_fw":"…", "ip":"…" }
 ```
 
 What to watch:
 
+- **`largest_free_block`** — the largest *contiguous* internal block. **This is
+  the number that predicts the panel-driver deadlock**, not `free_heap`: the
+  driver's per-frame worker stacks need 8 KB in one piece, and a fragmented heap
+  can report plenty free while failing that. Should stay well above the 20 KB
+  gate.
 - **`min_free_heap`** — the low-water mark of *internal* RAM. If it dips near or
   below the 55 KB heap gate, you risk the white-screen hang ([ch. 03](03-epaper-deep-dive.md)).
   Healthy is ~77 KB+.
-- **`full_refreshes`** — should advance steadily; a poll whose values didn't
-  change should add *zero* refreshes.
+- **`reset_reason`** — `esp_reset_reason()` of the current boot. `6` =
+  `ESP_RST_TASK_WDT` means the watchdog rescued a hang; `1` = clean power-on. The
+  boot banner prints the same thing in words.
+- **`full_refreshes`** — advances at most once per `kMinRefreshIntervalSeconds`;
+  a tick whose values didn't change adds *zero* refreshes.
+- **`refresh_deferred_*`** — pushes the guard held back, split by cause (rate
+  limit / heap / temperature). A climbing `…_heap` means real memory pressure; a
+  climbing `…_rate` is just the once-per-minute rule doing its job.
+- **`last_refresh_ms`** / **`max_refresh_ms`** — what a panel update actually
+  costs on your board (expect ~1 s).
+- **`net_tick_ago_s`** — net-task liveness. Should never exceed ~60 s; the UI
+  task reboots the board at `kNetStallRebootSeconds`.
 - **`consecutive_fail`** / **`last_poll_ago_s`** — sensor/Wi-Fi reachability.
+
+There is also **`GET /repair`**, which queues the de-ghost routine (alternating
+black/white GC16 frames, ~10 s) for the UI task:
+
+```bash
+curl http://airdeck.local/repair
+```
 
 ### OTA updates
 

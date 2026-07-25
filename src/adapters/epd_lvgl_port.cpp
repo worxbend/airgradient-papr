@@ -17,7 +17,11 @@ static uint32_t tickCb() {
 static void flushCb(lv_display_t* disp, const lv_area_t* area,
                     uint8_t* px_map) {
   auto* guard = static_cast<EpdGuard*>(lv_display_get_user_data(disp));
-  uint8_t* fb = guard->framebuffer();
+  uint8_t* fb = guard ? guard->framebuffer() : nullptr;
+  if (!fb) {  // bring-up failed; never write through a null framebuffer
+    lv_display_flush_ready(disp);
+    return;
+  }
 
   const int x1 = area->x1, y1 = area->y1, x2 = area->x2, y2 = area->y2;
   const int aw = x2 - x1 + 1;
@@ -54,7 +58,12 @@ lv_display_t* epdLvglInit(EpdGuard* guard) {
 
   uint8_t* buf1 = (uint8_t*)heap_caps_malloc(kBufBytes, MALLOC_CAP_SPIRAM);
   uint8_t* buf2 = (uint8_t*)heap_caps_malloc(kBufBytes, MALLOC_CAP_SPIRAM);
-  if (!buf1 || !buf2) return nullptr;
+  if (!buf1 || !buf2) {
+    heap_caps_free(buf1);
+    heap_caps_free(buf2);
+    lv_display_delete(disp);  // don't leave a half-built display registered
+    return nullptr;
+  }
 
   lv_display_set_buffers(disp, buf1, buf2, kBufBytes,
                          LV_DISPLAY_RENDER_MODE_PARTIAL);

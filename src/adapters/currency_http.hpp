@@ -5,6 +5,7 @@
 #pragma once
 #include <Arduino.h>
 
+#include "adapters/psram_http.hpp"
 #include "domain/currency.hpp"
 
 namespace adapters {
@@ -15,7 +16,10 @@ class CurrencyHttp {
   const char* lastError() const { return err_; }
 
  private:
-  bool tlsGet(const char* url, String& body, uint32_t timeoutMs = 10000);
+  // Bodies land in PSRAM (see psram_http.hpp): the NBU history response is ~30
+  // daily records and bank.gov.ua answers chunked, so an Arduino String would
+  // fragment internal DRAM on every 30-minute poll.
+  bool tlsGet(const char* url, PsramBody& body, uint32_t timeoutMs = 10000);
   char err_[64] = {0};
 };
 

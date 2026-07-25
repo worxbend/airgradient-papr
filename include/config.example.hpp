@@ -31,7 +31,39 @@ constexpr double kLatitude = 0.0;
 constexpr double kLongitude = 0.0;
 constexpr uint32_t kWeatherPollSeconds = 600;    // 10 min
 constexpr uint32_t kCurrencyPollSeconds = 1800;  // 30 min
-constexpr uint32_t kPageRefreshSeconds = 30;     // whole-page redraw interval
+
+// ---- Display refresh guards (panel protection) -----------------------------
+// One full GC16 update costs ~47 panel frames, blocks the UI task for ~1 s and
+// peaks the panel at up to 950 mW (ED047TC1 datasheet §6-2). The guards below
+// cap how often the panel may be driven, no matter how chatty the data is.
+//
+// kMinRefreshIntervalSeconds is the HARD floor between two panel updates: the
+// framebuffer keeps accumulating changes and the newest image is pushed at the
+// next allowed slot. 60 s matches the finest thing on screen that actually
+// moves (the HH:MM clock) — raise it to 300 for a much quieter panel at the
+// cost of a clock that can read up to 5 minutes stale.
+constexpr uint32_t kMinRefreshIntervalSeconds = 60;
+// Floor for user-initiated pushes (a button page switch). Short enough that
+// paging feels instant, long enough that a mashed button can't burn one
+// waveform per press.
+constexpr uint32_t kForcedRefreshMinSeconds = 3;
+// How often the page models are recomputed (clock, "last seen", bands). Pure
+// CPU — this does NOT touch the panel; it only decides *what* the next allowed
+// refresh will show.
+constexpr uint32_t kUiTickSeconds = 15;
+// De-ghost backstop: repaint the whole page this often even if nothing changed,
+// to clear e-paper particle memory. 0 disables.
+constexpr uint32_t kDeGhostRefreshSeconds = 3600;  // hourly
+
+// ---- Fault recovery --------------------------------------------------------
+// Hardware task watchdog on the UI task: if the panel driver deadlocks (its
+// per-frame xTaskCreate can fail under a fragmented heap and then block forever
+// on a semaphore), the board reboots itself instead of waiting for a human.
+// Must comfortably exceed the worst-case refresh (~1-2 s).
+constexpr uint32_t kWatchdogSeconds = 60;
+// Reboot if the net task stops making progress for this long (worst legitimate
+// case is a 3x-retried wttr.in fetch at 15 s each plus a connect window).
+constexpr uint32_t kNetStallRebootSeconds = 600;
 
 // ---- Behaviour -------------------------------------------------------------
 constexpr uint32_t kPollSeconds = 30;    // 15..300

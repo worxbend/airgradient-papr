@@ -8,6 +8,7 @@
 #include <WiFiClient.h>
 #include <time.h>
 
+#include "adapters/psram_http.hpp"
 #include "app/clock.hpp"
 
 namespace adapters {
@@ -106,31 +107,18 @@ bool WeatherHttp::fetch(double lat, double lon, const char* city,
   snprintf(url, sizeof(url), "http://wttr.in/%.4f,%.4f?format=j1", lat, lon);
 
   // wttr.in renders on first hit and can be slow / flaky — retry a few times.
-  String body;
-  int code = -1;
-  for (int attempt = 0; attempt < 3 && body.isEmpty(); ++attempt) {
-    WiFiClient client;
-    HTTPClient http;
-    http.setConnectTimeout(6000);
-    http.setTimeout(15000);
-    http.setUserAgent("curl/8.5.0");  // wttr.in serves JSON to curl UAs
-    if (!http.begin(client, url)) {
-      strlcpy(err_, "wx begin", sizeof(err_));
-      delay(500);
-      continue;
-    }
-    code = http.GET();
-    if (code == HTTP_CODE_OK) {
-      // getString() de-chunks the (chunked) response; a streamed parse would
-      // choke on the chunk-size markers.
-      body = http.getString();
-    } else {
-      snprintf(err_, sizeof(err_), "wx http %d", code);
-    }
-    http.end();
-    if (body.isEmpty()) delay(800);
+  // The response is *chunked* and tens of KB, so it goes to PSRAM via
+  // writeToStream() rather than an Arduino String: getString() would grow a
+  // buffer by repeated realloc in internal DRAM every 10 minutes, which is what
+  // fragments the heap the panel driver needs (see adapters/psram_http.hpp).
+  // A streamed parse is still not an option — the chunk-size markers corrupt it.
+  adapters::PsramBody body;
+  if (!httpGetToPsram(url, body, /*tls=*/false, /*connectTimeoutMs=*/6000,
+                      /*timeoutMs=*/15000, /*attempts=*/3,
+                      /*userAgent=*/"curl/8.5.0",  // wttr.in serves JSON to curl
+                      err_, sizeof(err_))) {
+    return false;
   }
-  if (body.isEmpty()) return false;
 
   // Filter keeps only the handful of fields we need — the full j1 payload is
   // tens of KB of hourly forecasts we must not load into RAM.
@@ -156,9 +144,11 @@ bool WeatherHttp::fetch(double lat, double lon, const char* city,
   fh["uvIndex"] = true;
   fh["weatherDesc"][0]["value"] = true;
 
-  JsonDocument doc;
-  DeserializationError e =
-      deserializeJson(doc, body, DeserializationOption::Filter(filter));
+  // Parse into PSRAM too — even filtered, the 3-day/hourly arrays are a few KB
+  // that would otherwise come out of internal DRAM while the body is still held.
+  JsonDocument doc(&adapters::psramJson());
+  DeserializationError e = deserializeJson(doc, body.c_str(), body.length(),
+                                           DeserializationOption::Filter(filter));
   if (e) {
     snprintf(err_, sizeof(err_), "wx json: %s", e.c_str());
     return false;

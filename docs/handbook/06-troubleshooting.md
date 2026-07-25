@@ -42,6 +42,36 @@ returns:** check `/health` → `min_free_heap`; if it's near 55 KB during your n
 feature, move buffers to PSRAM or free them before drawing. (DECISIONS
 "White-screen hang" / "Full-refresh only".)
 
+### It runs fine for hours/days, then freezes and only a manual reset helps ⚠️
+**Cause:** the same panel-driver deadlock as above, reached the slow way. Each
+`String`/mbedTLS fetch fragments internal DRAM a little; eventually `free_heap`
+still looks healthy but the **largest single block** is too small for the
+driver's 8 KB per-frame task stacks, `xTaskCreate` fails and the draw blocks
+forever on a semaphore — with the high-voltage rails still on. **Fixes (in
+place):** `present()` gates on `largest_free_block` as well as `free_heap`; the
+net task waits on `adapters::panelBusy()` so a TLS handshake can't land mid-draw;
+and the UI task is on the **task watchdog** (`kWatchdogSeconds`, panic → reset),
+so the board reboots itself instead of waiting for you. **Diagnose:** `/health` →
+`reset_reason` (`6` = task WDT), `largest_free_block`, `refresh_deferred_heap`.
+The boot banner also prints the previous reset reason in words.
+
+### Screen is stale but the board is clearly alive
+**Cause:** the net task is wedged inside a socket/TLS read — the task WDT doesn't
+cover it (it blocks on I/O, so the idle task still runs). **Fix (in place):** the
+net task writes a liveness beacon each iteration and the UI task reboots the
+board if it stops advancing for `kNetStallRebootSeconds` (10 min). Watch it on
+`/health` → `net_tick_ago_s`; it should never exceed ~60 s.
+
+### The screen only updates once a minute
+**Working as designed** — that's the refresh rate limit
+(`kMinRefreshIntervalSeconds`). One full GC16 update is ~47 panel frames, ~1 s of
+blocked UI and up to 950 mW; the old 30 s cadence spent ~2 880 of them a day on a
+clock that ticks once a minute. Page switches bypass the floor
+(`kForcedRefreshMinSeconds`, 3 s) so buttons still feel instant. Raise
+`kMinRefreshIntervalSeconds` for an even quieter panel (the clock just reads
+staler); lower it only if you accept the cost. See
+[ch. 03 → How often may we refresh?](03-epaper-deep-dive.md).
+
 ### Every poll redraws the whole screen (slow, flashy)
 **Cause:** `lv_label_set_text` invalidates unconditionally, so re-setting every
 label each poll dirties the whole screen. **Fix:** use `ui::theme::setText()`,
