@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reproducible font generation for airdeck-papr (PLAN.md §3 fonts/icons).
+# Reproducible font generation for airdeck-papr (fonts + icons).
 # Requires: node + `npm install lv_font_conv` in this tools/ dir.
 #
 #   cd tools && npm install lv_font_conv && ./fontgen.sh

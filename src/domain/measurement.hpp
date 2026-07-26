@@ -1,6 +1,6 @@
 // src/domain/measurement.hpp
 // Pure data model for one AirGradient ONE reading. No Arduino deps →
-// compiles and is unit-tested on the host (PLAN.md §T4, §D4).
+// compiles and is unit-tested on the host.
 #pragma once
 #include <cmath>
 #include <cstdint>

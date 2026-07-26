@@ -71,7 +71,7 @@ bool AirGradientHttp::poll(domain::Measurement& out) {
   m.pm01 = getf(doc, "pm01");
   m.pm02 = getf(doc, "pm02");
   m.pm10 = getf(doc, "pm10");
-  // Tolerant of both key spellings across firmware versions (§7 risk table).
+  // Tolerant of both key spellings across firmware versions.
   m.pm003Count = doc["pm003Count"].is<float>() ? doc["pm003Count"].as<float>()
                                                : (doc["pm003_count"] | NAN);
   m.atmp = getf(doc, "atmp");

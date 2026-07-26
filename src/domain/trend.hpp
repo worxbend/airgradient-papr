@@ -1,6 +1,6 @@
 // src/domain/trend.hpp
 // Ring-buffer history + trend (Δ vs previous reading) over a metric.
-// Pure, host-tested (PLAN.md §D4, §T4).
+// Pure, host-tested.
 #pragma once
 #include <cmath>
 #include <cstdint>

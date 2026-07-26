@@ -1,6 +1,6 @@
 // src/domain/aqi.hpp
 // US EPA AQI (PM2.5) + status banding for CO2/TVOC/NOx/temp/RH.
-// Pure, host-tested (PLAN.md §D4, §T4).
+// Pure, host-tested.
 #pragma once
 #include <cmath>
 #include <cstdint>

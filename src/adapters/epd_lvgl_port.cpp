@@ -6,7 +6,7 @@
 
 namespace adapters {
 
-// ~1/10 screen partial render buffers (PLAN.md §D2): 960 x 54 px, L8 = 1 B/px.
+// ~1/10 screen partial render buffers: 960 x 54 px, L8 = 1 B/px.
 static constexpr int kBufLines = 54;
 static constexpr size_t kBufBytes = (size_t)EpdGuard::W * kBufLines;
 

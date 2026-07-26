@@ -133,7 +133,7 @@ doRefresh = firstImageEver
 The serial log tells you which path ran: `[epd] refresh (changed)`,
 `[epd] refresh (backstop/first)`, or `[epd] skip refresh (unchanged)`.
 
-### The brownout safety gate (§6.1.4) — this one protects hardware
+### The brownout safety gate — this one protects hardware
 
 An e-paper refresh drives the panel with a carefully balanced AC-like waveform.
 If the supply **browns out in the middle** of a refresh, the panel gets a

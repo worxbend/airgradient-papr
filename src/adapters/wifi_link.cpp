@@ -11,7 +11,7 @@ static constexpr uint32_t kConnectWindowMs = 8000;
 void WifiLink::begin() {
   WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);  // snappy polls while awake (§2b)
+  WiFi.setSleep(false);  // snappy polls while awake
   WiFi.setAutoReconnect(true);
   started_ = true;
   nextAttemptAt_ = 0;  // attempt immediately

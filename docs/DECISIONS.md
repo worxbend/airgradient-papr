@@ -6,19 +6,14 @@ Lockfile notes and the deviations/gotchas discovered during bring-up.
 > the book-style, from-first-principles guide to the whole firmware. This file
 > is the terse forensic log of *why each version is pinned* and *how each gotcha
 > was fixed*; the handbook explains *how the system works*.
->
-> Source comments and this file cite a historical `PLAN.md` with section markers
-> (e.g. `§6.1.4`). That original design spec is not in the repo; its still-useful
-> content now lives in the handbook, which **supersedes it**. The `§` numbers are
-> kept only as stable cross-references.
 
 ## Pinned toolchain / libraries
 
 | Component | Pin | Notes |
 |---|---|---|
-| PlatformIO platform | `espressif32@6.7.0` | Arduino core 2.0.16 — LilyGo-EPD47 needs core **<3.0** (PLAN §P1) |
+| PlatformIO platform | `espressif32@6.7.0` | Arduino core 2.0.16 — LilyGo-EPD47 needs core **<3.0**. |
 | LilyGo-EPD47 | git `#5b1adc7` | Pinned SHA. On the classic ESP32 target it compiles the **I2S/RMT parallel driver** (`i2s_data_bus.c`, `rmt_pulse.c`) — the correct path for the WROVER-E. |
-| LVGL | `9.2.2` | `^9.2` resolved to 9.5.0 whose ARM **Helium `.S`** kernels break the Xtensa assembler; pinned to 9.2.2 (PLAN §7 "pin LVGL minor version"). |
+| LVGL | `9.2.2` | `^9.2` resolved to 9.5.0 whose ARM **Helium `.S`** kernels break the Xtensa assembler; pinned to 9.2.2. |
 | ArduinoJson | `^7.2.0` → 7.4.3 | v7 `JsonDocument` + `Filter`. |
 
 ## Bring-up gotchas (fixed)
@@ -45,8 +40,8 @@ added `tools/pio_strip_lvgl_asm.py` (a pre-build hook) that blanks any leftover
 `.S` files — belt-and-suspenders so a future minor bump can't reintroduce it.
 
 ### 3. LilyGo-EPD47 has no `epd_hl_*` high-level API
-PLAN §D1/§D3 assumed the epdiy high-level API (`epd_hl_update_area`, `MODE_DU`,
-`MODE_GC16`). The pinned LilyGo fork only exposes the **classic low-level API**:
+The original design assumed the epdiy high-level API (`epd_hl_update_area`,
+`MODE_DU`, `MODE_GC16`). The pinned LilyGo fork only exposes the **classic low-level API**:
 a self-managed 4 bpp framebuffer (`EPD_WIDTH/2 * EPD_HEIGHT` bytes, `0xFF` =
 white) drawn via `epd_draw_grayscale_image(area, data)` (15-frame GC16-class
 waveform) and `epd_clear_area(area)`. `DrawMode_t` is only
@@ -55,8 +50,7 @@ waveform) and `epd_clear_area(area)`. `DrawMode_t` is only
 **Adaptation (`adapters/epd_guard.cpp`):** the guard owns the full framebuffer;
 partial refresh extracts the (even-x-aligned) dirty sub-rectangle into a scratch
 buffer, `epd_clear_area()`s it (wipes ghosting), then redraws it. The
-partial-budget (N=6) + 15-min backstop + boot-hygiene semantics from PLAN §6 are
-preserved. The panel has no exposed temperature-set API in this fork, so the
+partial-budget (N=6) + 15-min backstop + boot-hygiene semantics are preserved. The panel has no exposed temperature-set API in this fork, so the
 0–50 °C **clamp** (refuse-and-hold) is enforced but the waveform temperature is
 not fed to the driver.
 
@@ -67,14 +61,14 @@ not fed to the driver.
 
 ## Deliberate MVP simplifications
 
-- **Fonts:** the hero value is 40 px (not the 96 px in PLAN §3) — a direct user
+- **Fonts:** the hero value is 40 px (down from the 96 px first drafted) — a direct user
   call after seeing it on the panel; the space it freed shows a large clock +
   date instead. Custom fonts (`tools/fontgen.sh` via `lv_font_conv`) provide the
   `µg/m³`/`°C` glyphs the built-in Montserrat lacks, plus the MDI watermark
   icons. Body text still uses built-in Montserrat.
 - **Config injection:** via gitignored `include/config.hpp` (from
   `config.example.hpp`) rather than `secrets.ini` build-flag injection — avoids
-  the missing-`extra_configs`-file failure mode. Either is fine per PLAN §2b.
+  the missing-`extra_configs`-file failure mode. Either approach is fine.
 - **Temperature to the panel:** this LilyGo fork exposes no waveform
   temperature-set API, so the guard enforces the 0–50 °C refuse-and-hold clamp
   but cannot feed ambient temp into the waveform.
@@ -108,7 +102,7 @@ deep-sleep profile (T5, `env:t5-epd47-v1-batt` + `app/power.cpp` + the
   auto-detected.
 - Net-task stack raised to 16 KB (was 8 KB) for the HTTP fetches.
 
-## White-screen hang: LVGL memory moved to PSRAM (§P13)
+## White-screen hang: LVGL memory moved to PSRAM
 
 Symptom: after adding the gauges page + extra fonts, the panel froze on a white
 screen once real data arrived. Root cause (found by bracketing the flush/panel
@@ -122,7 +116,7 @@ was still ~114 KB then.
 Fix: `LV_USE_STDLIB_MALLOC = LV_STDLIB_BUILTIN` with a 640 KB TLSF pool carved
 from PSRAM (`LV_MEM_POOL_ALLOC = heap_caps_malloc(.., MALLOC_CAP_SPIRAM)`). All
 LVGL objects/layers now live in PSRAM; internal heap `min_free` went 36 KB → 112 KB,
-so the panel driver's per-frame tasks always allocate. This is exactly PLAN §P13.
+so the panel driver's per-frame tasks always allocate.
 
 ## UI always available (no data ≠ blank)
 

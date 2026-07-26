@@ -1,5 +1,5 @@
 // src/adapters/wifi_link.hpp
-// Wi-Fi lifecycle with exponential-backoff reconnect (PLAN.md §2b).
+// Wi-Fi lifecycle with exponential-backoff reconnect.
 // No captive portal, no mDNS — fixed compile-time credentials.
 #pragma once
 #include <Arduino.h>

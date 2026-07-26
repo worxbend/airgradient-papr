@@ -1,4 +1,4 @@
-// Host unit tests for the pure domain/ layer (PLAN.md §T4).
+// Host unit tests for the pure domain/ layer.
 // Run with: pio test -e native-test
 #include <unity.h>
 

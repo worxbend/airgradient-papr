@@ -1,7 +1,7 @@
 /**
  * lv_conf.h — pinned LVGL 9.x config for airdeck-papr.
  *
- * Strategy (PLAN.md §D2): render in L8 (1 byte/px luminance), then the
+ * Strategy: render in L8 (1 byte/px luminance), then the
  * flush_cb converts to epdiy's 4 bpp framebuffer. LV_COLOR_DEPTH 8 makes L8
  * the native render format, which is the community-proven path for e-paper.
  *
@@ -28,7 +28,7 @@
    STDLIB WRAPPER SETTINGS
  *=========================*/
 
-/* LVGL manages its own TLSF pool carved out of PSRAM (§P13): this keeps the
+/* LVGL manages its own TLSF pool carved out of PSRAM: this keeps the
  * scarce internal RAM free for Wi-Fi and the epdiy per-frame worker tasks —
  * otherwise the object tree + render layers starve internal heap and the
  * panel driver's xTaskCreate hangs on a semaphore. */

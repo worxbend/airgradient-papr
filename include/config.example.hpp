@@ -3,8 +3,8 @@
 //
 //   cp include/config.example.hpp include/config.hpp
 //
-// Per PLAN.md §2b: Wi-Fi credentials and the AirGradient address are
-// COMPILE-TIME constants. No captive portal, no runtime provisioning.
+// Wi-Fi credentials and the AirGradient address are COMPILE-TIME constants.
+// No captive portal, no runtime provisioning.
 // Give the AirGradient a DHCP reservation so the fixed IP never drifts.
 #pragma once
 #include <cstdint>
@@ -75,7 +75,7 @@ constexpr bool kFahrenheit = false;
 // Wall power ignores all of these. On battery the board is a single-shot
 // wake->poll->render->deep-sleep loop, so the wake cadence dominates runtime:
 // waking every kPollSeconds (30 s) would flatten a LiPo in ~a day, so battery
-// gets its own, much longer interval. See handbook §2 (Power model).
+// gets its own, much longer interval. See handbook ch. 02 (Power model).
 constexpr uint32_t kBatteryPollSeconds = 900;  // wake cadence on battery (15 min)
 // Even when the air reading is byte-identical to what's already on the panel,
 // force a full GC16 redraw every Nth wake — refreshes the clock and clears any

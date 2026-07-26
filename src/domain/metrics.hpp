@@ -1,6 +1,6 @@
 // src/domain/metrics.hpp
 // Central metric catalog: value extraction, banding, labels, hero ranking.
-// Pure, host-tested (PLAN.md §3 hero rule, §D4).
+// Pure, host-tested.
 #pragma once
 #include "domain/aqi.hpp"
 #include "domain/measurement.hpp"

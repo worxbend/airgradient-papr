@@ -1,11 +1,11 @@
 // src/adapters/epd_guard.hpp
-// The single choke point for every panel write (PLAN.md §6.5). Owns the
-// 4 bpp framebuffer, power discipline, the refresh RATE LIMIT, the heap gates,
-// the temperature clamp, boot-hygiene and the repair routine.
+// The single choke point for every panel write. Owns the 4 bpp framebuffer,
+// power discipline, the refresh RATE LIMIT, the heap gates, the temperature
+// clamp, boot-hygiene and the repair routine.
 //
-// Rate limit (handbook §3 "How often may we refresh?"): one full GC16 update
-// costs ~47 panel frames (`epd_clear()` = 32, `epd_draw_grayscale_image()` =
-// 15), blocks the calling task for ~1 s and peaks the panel at up to 950 mW
+// Rate limit (handbook ch. 03, "How often may we refresh?"): one full GC16
+// update costs ~47 panel frames (`epd_clear()` = 32, `epd_draw_grayscale_image()`
+// = 15), blocks the calling task for ~1 s and peaks the panel at up to 950 mW
 // (ED047TC1 datasheet §6-2). Pushing one every 30 s — which the unconditional
 // interval redraw used to do — is ~2 880 full-screen waveforms a day for a
 // clock that only changes once a minute. `present()` therefore refuses to touch
@@ -35,8 +35,8 @@ class EpdGuard {
 
   // Refuse a panel push below this much *internal* free heap. epd_draw_*
   // spawns two 8 KB FreeRTOS worker tasks per frame; if that xTaskCreate fails
-  // under low heap the draw blocks forever on a semaphore (see handbook §3 and
-  // DECISIONS "white-screen hang"). Keep the region dirty and retry later.
+  // under low heap the draw blocks forever on a semaphore (see handbook ch. 03
+  // and DECISIONS "white-screen hang"). Keep the region dirty and retry later.
   static constexpr uint32_t kMinHeapForRefresh = 55000u;
 
   // ...and total free heap is not enough on its own: a task stack must come out
@@ -105,13 +105,13 @@ class EpdGuard {
 
   void setAmbientTempC(float c);
 
-  // §6.2 alternating black/white GC16 frames to shift stuck particles. Blocking
+  // Alternating black/white GC16 frames to shift stuck particles. Blocking
   // (~2.5 s per cycle) and MUST be called from the UI task — it drives the panel
   // directly, so calling it from the net task would race a refresh in flight.
   // Returns false if its scratch buffer could not be allocated.
   bool repairRoutine(int cycles = 4);
   void clearWhite();        // full white GC16 frame
-  void powerOffForSleep();  // epd_poweroff_all before sleep (§6.1.3)
+  void powerOffForSleep();  // epd_poweroff_all before sleep
   void markCleanShutdown();  // set NVS clean flag
 
   uint32_t fullRefreshes() const { return fullRefreshes_; }

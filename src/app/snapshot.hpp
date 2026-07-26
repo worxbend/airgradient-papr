@@ -1,6 +1,6 @@
 // src/app/snapshot.hpp
 // The single value handed from net_task -> ui_task through a length-1 mailbox
-// queue (PLAN.md §D5). Plain-old-data so it copies by value cleanly.
+// queue. Plain-old-data so it copies by value cleanly.
 #pragma once
 #include "domain/currency.hpp"
 #include "domain/measurement.hpp"

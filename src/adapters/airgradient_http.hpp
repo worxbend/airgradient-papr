@@ -1,6 +1,6 @@
 // src/adapters/airgradient_http.hpp
 // AirGradient ONE local-server poller: HTTPClient GET + ArduinoJson v7 parse
-// into a domain::Measurement (PLAN.md §D4, §T2).
+// into a domain::Measurement.
 #pragma once
 #include <Arduino.h>
 

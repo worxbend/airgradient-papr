@@ -1,5 +1,5 @@
 // src/app/health.hpp
-// Cross-task status snapshot for the /health endpoint (PLAN.md §T6). Scalar
+// Cross-task status snapshot for the /health endpoint. Scalar
 // fields only; 32-bit aligned reads/writes on ESP32 are atomic, which is all a
 // status endpoint needs — no locking.
 #pragma once

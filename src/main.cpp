@@ -1,4 +1,4 @@
-// src/main.cpp — composition root (PLAN.md §D5, §8.1).
+// src/main.cpp — composition root.
 //
 // This is the "front door": it creates every adapter and wires the layers
 // together. New to the project? Read docs/handbook/ (ch. 01 architecture,
@@ -371,7 +371,7 @@ void loop() {
 //     wake, to refresh the clock and clear ghosting);
 //   * never wastes a refresh on a "Connecting" splash — the last good frame
 //     stays on screen for the few seconds it takes to poll.
-// See handbook §2 (Power model) for the numbers.
+// See docs/handbook/02-power-model.md for the numbers.
 
 // RTC slow-memory state — survives deep sleep, lost on power-cut / reset.
 RTC_DATA_ATTR static uint32_t rtcLastSig = 0;  // signature of on-panel reading
@@ -403,7 +403,7 @@ static uint32_t measurementSignature(const domain::Measurement& m) {
 static void sleepFor(uint32_t seconds) {
   g_guard
       .markCleanShutdown();    // clean flag -> next wake may preserve the image
-  g_guard.powerOffForSleep();  // rails + peripherals down (§6.1.3)
+  g_guard.powerOffForSleep();  // rails + peripherals down
   WiFi.disconnect(true, false);
   Serial.printf("[sleep] %lus\n", (unsigned long)seconds);
   Serial.flush();
@@ -433,7 +433,7 @@ void setup() {
   float vbat = app::batteryVoltage();
   Serial.printf("[batt] %.2f V (%d%%)\n", vbat, app::batteryPercent());
 
-  // Brownout gate (§6.1.4): too low to safely drive a waveform -> show a static
+  // Brownout gate: too low to safely drive a waveform -> show a static
   // charge screen once and sleep long. vbat<=0.5 means "no divider / on USB".
   if (vbat > 0.5f && vbat < app::kBatteryLowV) {
     ui::showMessage("CHARGE ME", "Battery low", "");

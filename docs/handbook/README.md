@@ -4,11 +4,8 @@
 > brand-new embedded engineer (or a very clever six-year-old) can read it
 > front-to-back and then confidently change the code.
 
-This handbook is the **authoritative design document** for airdeck. The source
-comments occasionally reference a historical `PLAN.md` with section markers like
-`§6.1.4`; that document was the original design spec. Those section numbers are
-preserved here where they still matter, but **this handbook supersedes it** —
-if the code and this book disagree, the code wins, and you should fix the book.
+This handbook is the **authoritative design document** for airdeck. If the code
+and this book disagree, the code wins — and you should fix the book.
 
 ## How to read this book
 

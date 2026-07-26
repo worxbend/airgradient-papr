@@ -33,7 +33,7 @@ bool EpdGuard::init(bool clearOnBoot) {
   if (!fb_) return false;
   memset(fb_, 0xFF, kFbBytes);  // 0xF nibbles = white
 
-  // Boot hygiene (§6.1.4): if the previous run didn't flag a clean shutdown,
+  // Boot hygiene: if the previous run didn't flag a clean shutdown,
   // a crash/power-pull happened mid-life — clear the panel before first draw.
   Preferences prefs;
   prefs.begin("epd", false);
@@ -136,7 +136,7 @@ void EpdGuard::present(bool forceFull) {
     return;
   }
 
-  // Temperature clamp (§6.1.5): refuse refreshes outside the panel's safe
+  // Temperature clamp: refuse refreshes outside the panel's safe
   // range; keep the last image (costs nothing) and retry when back in range.
   if (tempClampBlocks()) {
     deferredTemp_++;
@@ -158,7 +158,7 @@ void EpdGuard::present(bool forceFull) {
   // cleaner on this panel and avoids partial-refresh artifacts.
   const uint32_t t0 = millis();
   g_panelBusy = true;  // net task holds off any big allocation until we're done
-  epd_poweron();       // high-voltage rails ON only during the update (§6.1.2)
+  epd_poweron();       // high-voltage rails ON only during the update
   fullRefresh();
   epd_poweroff();  // rails OFF immediately; panel holds the image with no power
   g_panelBusy = false;
@@ -190,7 +190,7 @@ void EpdGuard::clearWhite() {
 }
 
 bool EpdGuard::repairRoutine(int cycles) {
-  // §6.2: alternate full black/white GC16 frames to shift stuck particles.
+  // Alternate full black/white GC16 frames to shift stuck particles.
   //
   // The solid-colour source buffer is allocated here and released immediately:
   // it is a quarter-megabyte that used to sit in PSRAM for the whole uptime for
@@ -225,8 +225,7 @@ bool EpdGuard::repairRoutine(int cycles) {
 }
 
 void EpdGuard::powerOffForSleep() {
-  epd_poweroff_all();  // rails + peripherals down (§6.1.3) — battery + panel
-                       // fix
+  epd_poweroff_all();  // rails + peripherals down — battery + panel fix
   g_panelBusy = false;
 }
 

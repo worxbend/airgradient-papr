@@ -1,6 +1,6 @@
 // src/ui/ui.hpp
 // Public UI surface + page navigation. All of these MUST be called from the UI
-// task only (LVGL is not thread-safe — PLAN.md §D5).
+// task only (LVGL is not thread-safe).
 #pragma once
 #include "app/snapshot.hpp"
 
