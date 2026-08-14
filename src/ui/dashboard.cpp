@@ -307,7 +307,7 @@ void update(const app::Snapshot& s) {
   theme::setText(tPm1.status, bandWord(bandPm25(m.pm01)));
   fmt1(b, sizeof(b), m.pm10);
   theme::setText(tPm10.value, b);
-  theme::setText(tPm10.status, bandWord(bandPm25(m.pm10)));
+  theme::setText(tPm10.status, bandWord(bandPm10(m.pm10)));
   fmt0(b, sizeof(b), m.pm003Count);
   theme::setText(tPm003.value, b);
   theme::setText(tPm003.status, "");

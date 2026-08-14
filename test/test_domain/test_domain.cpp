@@ -98,6 +98,17 @@ void test_hero_priority_tiebreak() {
   TEST_ASSERT_TRUE(heroMetric(m) == MetricId::TVOC);
 }
 
+// PM10 uses its own (looser) EPA breakpoints, not PM2.5's: 60 µg/m³ of PM10
+// is an EPA-Moderate day, while 60 of PM2.5 would be Unhealthy.
+void test_pm10_uses_own_breakpoints() {
+  TEST_ASSERT_TRUE(bandPm10(NAN) == Band::NoData);
+  TEST_ASSERT_TRUE(bandPm10(54.0f) == Band::Good);
+  TEST_ASSERT_TRUE(bandPm10(60.0f) == Band::Moderate);
+  TEST_ASSERT_TRUE(bandPm25(60.0f) == Band::Unhealthy);  // the old, wrong band
+  TEST_ASSERT_TRUE(bandPm10(200.0f) == Band::Elevated);
+  TEST_ASSERT_TRUE(bandPm10(400.0f) == Band::Hazardous);
+}
+
 // The AirGradient's own display shows EPA-compensated PM2.5; papr must agree.
 void test_pm25_prefers_compensated() {
   Measurement m;
@@ -118,5 +129,6 @@ int main(int, char**) {
   RUN_TEST(test_hero_picks_worst);
   RUN_TEST(test_hero_priority_tiebreak);
   RUN_TEST(test_pm25_prefers_compensated);
+  RUN_TEST(test_pm10_uses_own_breakpoints);
   return UNITY_END();
 }

@@ -82,9 +82,11 @@ inline Band band(const Measurement& m, MetricId id) {
     case MetricId::NOX:
       return bandNox(m.noxIndex);
     case MetricId::PM01:
+      // No official PM1.0 standard exists; PM2.5 breakpoints are the usual
+      // conservative proxy (PM1.0 is a subset of PM2.5 by definition).
       return bandPm25(m.pm01);
     case MetricId::PM10:
-      return bandPm25(m.pm10);
+      return bandPm10(m.pm10);
     case MetricId::PM003:
       return bandPm25(m.pm003Count > 1000 ? 30 : 5);
     case MetricId::TEMP:

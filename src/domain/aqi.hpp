@@ -91,6 +91,18 @@ inline Band bandPm25(float pm25) {
   return bandFromAqi(epaAqiPm25(pm25));
 }
 
+// PM10 has its own, much looser EPA breakpoints (24-h, µg/m³): 0-54 Good,
+// 55-154 Moderate, 155-254 USG, 255-354 Unhealthy. Banding PM10 with the
+// PM2.5 thresholds would call an EPA-"Moderate" 60 µg/m³ day "Unhealthy".
+inline Band bandPm10(float pm10) {
+  if (std::isnan(pm10) || pm10 < 0.0f) return Band::NoData;
+  if (pm10 <= 54.0f) return Band::Good;
+  if (pm10 <= 154.0f) return Band::Moderate;
+  if (pm10 <= 254.0f) return Band::Elevated;
+  if (pm10 <= 354.0f) return Band::Unhealthy;
+  return Band::Hazardous;
+}
+
 inline Band bandCo2(float ppm) {
   if (std::isnan(ppm)) return Band::NoData;
   if (ppm <= 600) return Band::Good;
