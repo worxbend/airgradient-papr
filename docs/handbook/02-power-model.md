@@ -55,13 +55,22 @@ work, then calls `esp_deep_sleep_start()`. Deep sleep wipes RAM and reboots from
 ```
    power on ──▶ setup() ──▶ deep sleep ──(timer)──▶ setup() ──▶ deep sleep ──▶ ...
                   │
-                  ├─ bring up display (preserve image on a timer wake)
+                  ├─ fire off Wi-Fi association (async; fast-reconnect hint
+                  │  from RTC memory skips the scan + DHCP on timer wakes)
                   ├─ read battery; if too low → charge screen → long sleep
-                  ├─ Wi-Fi connect + poll AirGradient
+                  ├─ wait out the connect + poll AirGradient (+ NTP daily)
                   ├─ decide: does this wake earn a refresh?  (the key step)
-                  ├─ if yes: draw the dashboard (full GC16)
+                  ├─ if yes: bring up the display NOW (preserve image on a
+                  │  timer wake) and draw the dashboard (full GC16)
                   └─ power everything off → deep sleep for kBatteryPollSeconds
 ```
+
+Two ordering details matter. The radio starts **first and asynchronously** —
+`WifiLink::startConnect()` returns immediately, so the battery read (and the
+display bring-up, when one happens) overlaps association instead of preceding
+it. And the display is brought up **lazily**: a wake that ends in "skip refresh
+(unchanged)" — roughly half of them — never runs `epd_init`, never allocates
+the 259 KB framebuffer, and never builds the LVGL page tree at all.
 
 ### Where the battery actually goes
 
@@ -69,7 +78,7 @@ Per wake, roughly, the energy sinks are:
 
 | Activity | Rough cost | Notes |
 |---|---|---|
-| Wi-Fi connect + poll | **the big one** — ~100–200 mA for a few seconds | Unavoidable; needed for fresh data. |
+| Wi-Fi connect + poll | **the big one** — ~100–200 mA for a few seconds | Needed for fresh data, but shrunk hard: the RTC fast-reconnect hint (channel + BSSID + saved DHCP lease) cuts the connect from ~2.5–5 s to ~1 s on most timer wakes. |
 | Full GC16 panel refresh | ~1 s of rail-on drive | Avoided entirely when data is unchanged. |
 | Deep sleep | microamps | The chip is essentially off. |
 
@@ -100,15 +109,23 @@ use two tricks:
    clean shutdown flag, `main.cpp` passes `clearPanel=false`, so the existing
    image is kept intact (a cold boot or an unclean shutdown still clears — boot
    hygiene wins). The wake cause is read via `esp_sleep_get_wakeup_cause()`.
+   On battery the clean flag lives in **RTC memory**, not NVS: two flash
+   commits per 15-minute wake would be ~192 flash writes a day, and a crash
+   wipes RTC memory anyway — which reads as "unclean" exactly as intended.
+   (The USB profile keeps the NVS flag: it has no RTC memory to lean on across
+   a power cut.)
 
 2. **Remember what's on the panel across sleep, in RTC memory.** RTC slow memory
    survives deep sleep. We stash a tiny **signature** of the last-rendered
-   reading:
+   reading (plus the Wi-Fi fast-reconnect hint and the clean flag above):
 
    ```cpp
    RTC_DATA_ATTR static uint32_t rtcLastSig;    // hash of the on-panel values
    RTC_DATA_ATTR static uint32_t rtcWakeCount;  // wakes since cold boot
    RTC_DATA_ATTR static bool     rtcHasImage;   // has the panel ever been drawn
+   RTC_DATA_ATTR static bool     rtcCleanShutdown;      // battery clean flag
+   RTC_DATA_ATTR static adapters::WifiFastHint rtcWifiHint;  // ch+BSSID+lease
+   RTC_DATA_ATTR static time_t   rtcLastNtpSync;        // daily-NTP gate
    ```
 
    `measurementSignature()` is an FNV-1a hash of the values we actually render,
