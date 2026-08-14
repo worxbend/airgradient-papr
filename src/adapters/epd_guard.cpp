@@ -26,7 +26,7 @@ static uint32_t largestInternalBlock() {
                                                     MALLOC_CAP_8BIT);
 }
 
-bool EpdGuard::init(bool clearOnBoot) {
+bool EpdGuard::init(bool clearOnBoot, bool nvsHygiene) {
   epd_init();
 
   fb_ = (uint8_t*)heap_caps_malloc(kFbBytes, MALLOC_CAP_SPIRAM);
@@ -35,11 +35,15 @@ bool EpdGuard::init(bool clearOnBoot) {
 
   // Boot hygiene: if the previous run didn't flag a clean shutdown,
   // a crash/power-pull happened mid-life — clear the panel before first draw.
-  Preferences prefs;
-  prefs.begin("epd", false);
-  bool wasClean = prefs.getBool("clean", true);
-  prefs.putBool("clean", false);  // mark "running / dirty" for this session
-  prefs.end();
+  // With nvsHygiene=false the caller owns that judgement (via clearOnBoot).
+  bool wasClean = true;
+  if (nvsHygiene) {
+    Preferences prefs;
+    prefs.begin("epd", false);
+    wasClean = prefs.getBool("clean", true);
+    prefs.putBool("clean", false);  // mark "running / dirty" for this session
+    prefs.end();
+  }
 
   // A battery timer-wake with a clean shutdown keeps the existing image (a full
   // clear here would both waste a waveform and destroy the pixels a skipped

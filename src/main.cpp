@@ -37,6 +37,7 @@
 #include "adapters/net_services.hpp"
 #endif
 #if defined(PROFILE_BATTERY)
+#include <driver/rtc_io.h>
 #include <esp_sleep.h>
 
 #include "app/power.hpp"
@@ -51,14 +52,14 @@ static lv_display_t* g_disp = nullptr;
 // Each step is a hard prerequisite for the next, so a failure returns
 // immediately instead of carrying on with a null framebuffer — LVGL would then
 // flush straight through a null pointer on the first render.
-static bool bringUpDisplay(bool clearPanel = true) {
+static bool bringUpDisplay(bool clearPanel = true, bool nvsHygiene = true) {
   if (!psramFound()) {
     Serial.println("[fatal] PSRAM not found — check board/build flags");
     return false;
   }
   Serial.printf("[boot] PSRAM: %u bytes free\n", (unsigned)ESP.getFreePsram());
 
-  if (!g_guard.init(clearPanel)) {
+  if (!g_guard.init(clearPanel, nvsHygiene)) {
     Serial.println("[fatal] EPD framebuffer alloc failed");
     return false;
   }
@@ -357,7 +358,9 @@ void loop() {
     esp_restart();
   }
 
-  delay(5);
+  // 20 ms ≈ 50 Hz: the screen changes at most every 3 s and the debouncer is
+  // happy at this rate; spinning at 200 Hz (the old delay(5)) only burned CPU.
+  delay(20);
 }
 
 // ===========================================================================
@@ -377,6 +380,31 @@ void loop() {
 RTC_DATA_ATTR static uint32_t rtcLastSig = 0;  // signature of on-panel reading
 RTC_DATA_ATTR static uint32_t rtcWakeCount = 0;  // wakes since cold boot
 RTC_DATA_ATTR static bool rtcHasImage = false;  // has the panel ever been drawn
+// Clean-shutdown flag: set just before deep sleep, cleared at the top of every
+// wake. Replaces the NVS "clean" flag on battery — two flash commits per
+// 15-minute wake would be ~192 flash writes a day for state that RTC memory
+// preserves for free (and a crash/power-pull wipes RTC, which reads as
+// "unclean" exactly as intended).
+RTC_DATA_ATTR static bool rtcCleanShutdown = false;
+// Wi-Fi fast-reconnect hint (channel + BSSID + DHCP lease) captured after each
+// successful connect; skips the all-channel scan + DHCP on the next wake.
+RTC_DATA_ATTR static adapters::WifiFastHint rtcWifiHint;
+// When SNTP last completed, so the (async, radio-chatty) sync can run daily
+// instead of every wake — system time itself survives deep sleep on the RTC.
+RTC_DATA_ATTR static time_t rtcLastNtpSync = 0;
+
+// The TZ environment variable does NOT survive deep sleep, so on wakes that
+// skip configTime() the timezone must still be restored or the on-screen
+// clock would silently render UTC. POSIX TZ signs are inverted: UTC+3 is
+// "UTC-3:00".
+static void restoreTimezone() {
+  const long total = cfg::kGmtOffsetSec + cfg::kDstOffsetSec;
+  char tz[24];
+  snprintf(tz, sizeof(tz), "UTC%+ld:%02ld", -(total / 3600),
+           labs(total % 3600) / 60);
+  setenv("TZ", tz, 1);
+  tzset();
+}
 
 // FNV-1a hash of the values we actually render, quantised to display precision,
 // so a sub-digit sensor wiggle doesn't cost a full-screen refresh.
@@ -400,59 +428,93 @@ static uint32_t measurementSignature(const domain::Measurement& m) {
   return h ? h : 1u;  // reserve 0 for "no signature yet"
 }
 
-static void sleepFor(uint32_t seconds) {
-  g_guard
-      .markCleanShutdown();    // clean flag -> next wake may preserve the image
-  g_guard.powerOffForSleep();  // rails + peripherals down
+// displayUp: whether bringUpDisplay() ran this wake. A skip-refresh wake never
+// initialises the panel, and epd_poweroff_all() on an uninitialised driver
+// would poke unconfigured rails.
+static void sleepFor(uint32_t seconds, bool displayUp) {
+  rtcCleanShutdown = true;  // clean flag -> next wake may preserve the image
+  if (displayUp) g_guard.powerOffForSleep();  // rails + peripherals down
   WiFi.disconnect(true, false);
   Serial.printf("[sleep] %lus\n", (unsigned long)seconds);
   Serial.flush();
+  // WROVER modules pull GPIO12 (MTDI strapping) up externally while the chip
+  // applies an internal pulldown — that divider leaks for the whole deep sleep
+  // unless the pin is isolated (ESP-IDF sleep-modes docs, WROVER note).
+  rtc_gpio_isolate(GPIO_NUM_12);
   esp_sleep_enable_timer_wakeup((uint64_t)seconds * 1000000ULL);
   esp_deep_sleep_start();
 }
 
 void setup() {
   Serial.begin(115200);
-  delay(200);
+  delay(50);  // enough for the UART to settle; 200 ms was pure awake-time tax
   app::g_health.resetReason = (uint32_t)esp_reset_reason();
   Serial.println("\n[airdeck] wake (battery profile)");
 
   // A cold boot (power-on / reset) clears the panel; a timer wake keeps the
   // existing image so an unchanged reading can skip the refresh entirely.
   const bool coldBoot = esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_TIMER;
-  if (!bringUpDisplay(/*clearPanel=*/coldBoot)) {
-    // Nothing to draw with. Don't touch the (uninitialised) panel rails — just
-    // sleep out the normal interval and retry from a fresh boot.
-    Serial.println("[fatal] display bring-up failed — sleeping");
-    Serial.flush();
-    esp_sleep_enable_timer_wakeup((uint64_t)cfg::kBatteryPollSeconds *
-                                  1000000ULL);
-    esp_deep_sleep_start();
-  }
+  // An unclean previous wake (crash mid-draw) also forces a clear: the panel
+  // may hold a half-written image the signature knows nothing about.
+  const bool preserved = !coldBoot && rtcCleanShutdown;
+  rtcCleanShutdown = false;  // mark this wake "in progress"
+
+  // Radio FIRST, and without waiting: WiFi.begin() associates in the
+  // background, so the display/ADC work below overlaps the 1-4 s of
+  // association + (skipped, when the fast hint holds) scan/DHCP instead of
+  // running before it. The hint comes from the previous wake via RTC memory.
+  adapters::WifiLink wifi(cfg::kWifiSsid, cfg::kWifiPass);
+  adapters::AirGradientHttp source(cfg::kMonitorUrl);
+  if (!coldBoot && rtcWifiHint.valid) wifi.setFastHint(rtcWifiHint);
+  wifi.begin();
+  wifi.startConnect();
+
+  // The display is NOT brought up yet: roughly half the wakes end in "skip
+  // refresh (unchanged)" and never need epd_init, the 259 KB framebuffer or
+  // ui::build() at all. ensureDisplay() runs it on first actual need.
+  bool displayUp = false;
+  auto ensureDisplay = [&]() -> bool {
+    if (!displayUp)
+      displayUp = bringUpDisplay(/*clearPanel=*/!preserved,
+                                 /*nvsHygiene=*/false);
+    return displayUp;
+  };
 
   float vbat = app::batteryVoltage();
   Serial.printf("[batt] %.2f V (%d%%)\n", vbat, app::batteryPercent());
 
-  // Brownout gate: too low to safely drive a waveform -> show a static
-  // charge screen once and sleep long. vbat<=0.5 means "no divider / on USB".
-  if (vbat > 0.5f && vbat < app::kBatteryLowV) {
-    ui::showMessage("CHARGE ME", "Battery low", "");
-    lv_refr_now(g_disp);
-    rtcLastSig = 0;  // force a real redraw once the pack recovers
-    rtcHasImage = true;
-    sleepFor(cfg::kBatteryLowSleepSeconds);
+  // Brownout gate: too low to safely drive a waveform -> show a static charge
+  // screen once and sleep long. vbat<=0.5 means "no divider / on USB". The
+  // 50 mV margin means the one "CHARGE ME" waveform itself still runs above
+  // kBatteryLowV — never below the very line that deems refreshes unsafe.
+  if (vbat > 0.5f && vbat < app::kBatteryLowV + 0.05f) {
+    if (ensureDisplay()) {
+      ui::showMessage("CHARGE ME", "Battery low", "");
+      lv_refr_now(g_disp);
+      rtcLastSig = 0;  // force a real redraw once the pack recovers
+      rtcHasImage = true;
+    }
+    sleepFor(cfg::kBatteryLowSleepSeconds, displayUp);
   }
-
-  adapters::WifiLink wifi(cfg::kWifiSsid, cfg::kWifiPass);
-  adapters::AirGradientHttp source(cfg::kMonitorUrl);
-  wifi.begin();
-  configTime(cfg::kGmtOffsetSec, cfg::kDstOffsetSec, "pool.ntp.org",
-             "time.nist.gov");
 
   app::Snapshot snap;
   bool pollOk = false;
-  if (wifi.ensureConnected()) {
+  if (wifi.ensureConnected()) {  // waits out the remainder of startConnect()
     snap.rssi = wifi.rssi();
+    wifi.captureFastHint(rtcWifiHint);  // next wake skips scan + DHCP
+
+    // SNTP is async and radio-chatty (DNS + UDP each wake), while system time
+    // itself survives deep sleep on the RTC slow clock — drift is seconds/day,
+    // invisible on an HH:MM display. Sync on cold boot, when never synced, or
+    // daily; otherwise just restore the TZ that deep sleep wiped.
+    const bool needNtp = coldBoot || !app::timeIsSynced() ||
+                         (time(nullptr) - rtcLastNtpSync) > 24L * 3600L;
+    if (needNtp)
+      configTime(cfg::kGmtOffsetSec, cfg::kDstOffsetSec, "pool.ntp.org",
+                 "time.nist.gov");
+    else
+      restoreTimezone();
+
     domain::Measurement m;
     if (source.poll(m)) {
       snap.m = m;
@@ -467,11 +529,11 @@ void setup() {
       snap.state = app::NetState::Offline;
       Serial.printf("[net] poll failed: %s\n", source.lastError());
     }
+    if (needNtp && app::timeIsSynced()) rtcLastNtpSync = time(nullptr);
   } else {
+    rtcWifiHint.valid = false;  // don't retry a hint that just failed
     snap.state = app::NetState::Offline;
   }
-
-  ui::update(snap);  // refresh page models (no panel I/O by itself)
 
   // Decide whether this wake earns a full-screen refresh.
   const uint32_t sig = pollOk ? measurementSignature(snap.m) : 0;
@@ -480,10 +542,22 @@ void setup() {
                         rtcWakeCount % cfg::kBatteryFullRefreshEvery == 0;
   // Always draw the very first frame; otherwise only when data changed or the
   // periodic backstop is due. A failed poll never redraws — it would just
-  // reprint the same numbers and burn a waveform.
-  const bool doRefresh = !rtcHasImage || (pollOk && (changed || backstop));
+  // reprint the same numbers and burn a waveform. A wake whose previous
+  // shutdown was unclean must redraw too: the panel content is untrusted.
+  const bool doRefresh =
+      !rtcHasImage || !preserved || (pollOk && (changed || backstop));
 
   if (doRefresh) {
+    if (!ensureDisplay()) {
+      // Nothing to draw with. Don't touch the (uninitialised) panel rails —
+      // just sleep out the normal interval and retry from a fresh boot.
+      Serial.println("[fatal] display bring-up failed — sleeping");
+      Serial.flush();
+      esp_sleep_enable_timer_wakeup((uint64_t)cfg::kBatteryPollSeconds *
+                                    1000000ULL);
+      esp_deep_sleep_start();
+    }
+    ui::update(snap);     // refresh page models (built by ensureDisplay)
     ui::showMainNow();    // leave splash, show the dashboard, full-invalidate
     lv_refr_now(g_disp);  // render + flush synchronously before sleeping
     rtcHasImage = true;
@@ -495,7 +569,7 @@ void setup() {
   }
 
   rtcWakeCount++;
-  sleepFor(cfg::kBatteryPollSeconds);
+  sleepFor(cfg::kBatteryPollSeconds, displayUp);
 }
 
 void loop() {}  // never reached — deep sleep restarts from setup()

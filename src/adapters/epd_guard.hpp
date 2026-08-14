@@ -74,7 +74,13 @@ class EpdGuard {
   // the bistable panel — the caller decides whether to redraw — so a skipped
   // refresh actually preserves pixels. Boot hygiene still forces a clear if the
   // previous run did not flag a clean shutdown, regardless of this flag.
-  bool init(bool clearOnBoot = true);
+  //
+  // nvsHygiene=false skips the NVS clean-flag dance entirely (no flash writes;
+  // the previous shutdown is assumed clean). The battery profile uses this and
+  // tracks cleanliness in RTC slow memory instead: two NVS commits per 15-min
+  // wake would be ~192 flash writes a day for a flag deep sleep preserves for
+  // free — see markCleanShutdown().
+  bool init(bool clearOnBoot = true, bool nvsHygiene = true);
 
   uint8_t* framebuffer() { return fb_; }
 
