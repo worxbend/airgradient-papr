@@ -112,9 +112,13 @@ bool WeatherHttp::fetch(double lat, double lon, const char* city,
   // buffer by repeated realloc in internal DRAM every 10 minutes, which is what
   // fragments the heap the panel driver needs (see adapters/psram_http.hpp).
   // A streamed parse is still not an option — the chunk-size markers corrupt it.
+  // 2 x 10 s, not 3 x 15 s: the old worst case pinned the net task for ~63 s,
+  // starving the AirGradient poll (the actual product) and leaning on the
+  // net-stall watchdog. A slow first-render wttr.in hit now just waits for the
+  // next 10-minute cycle.
   adapters::PsramBody body;
   if (!httpGetToPsram(url, body, /*tls=*/false, /*connectTimeoutMs=*/6000,
-                      /*timeoutMs=*/15000, /*attempts=*/3,
+                      /*timeoutMs=*/10000, /*attempts=*/2,
                       /*userAgent=*/"curl/8.5.0",  // wttr.in serves JSON to curl
                       err_, sizeof(err_))) {
     return false;

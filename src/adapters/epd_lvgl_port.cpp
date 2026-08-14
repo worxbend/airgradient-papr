@@ -27,16 +27,28 @@ static void flushCb(lv_display_t* disp, const lv_area_t* area,
   const int aw = x2 - x1 + 1;
 
   // px_map is L8 (0 = black .. 255 = white), row stride == aw (stride align 1).
+  //
+  // The bulk of each row is packed two source pixels -> one destination byte
+  // with a plain write. The per-pixel read-modify-write fallback runs only on
+  // the (at most two) unaligned edge pixels: both buffers live in PSRAM, and
+  // on the WROVER-E every PSRAM access pays the cache-errata barriers, so a
+  // full-screen flush doing 518,400 RMWs was 50-150 ms of pure memory stalls.
   for (int y = y1; y <= y2; ++y) {
     const uint8_t* src = px_map + (size_t)(y - y1) * aw;
     uint8_t* rowBase = fb + (size_t)y * (EpdGuard::W / 2);
-    for (int x = x1; x <= x2; ++x) {
-      const uint8_t l = src[x - x1];  // luminance, reused as 8-bit gray
+    int x = x1;
+    if (x & 1) {  // odd leading pixel: high nibble of its byte
       uint8_t* p = rowBase + (x >> 1);
-      if (x & 1)
-        *p = (*p & 0x0F) | (l & 0xF0);
-      else
-        *p = (*p & 0xF0) | (l >> 4);
+      *p = (*p & 0x0F) | (src[x - x1] & 0xF0);
+      ++x;
+    }
+    for (; x + 1 <= x2; x += 2) {  // aligned pairs: single write, no read
+      const uint8_t* s = src + (x - x1);
+      rowBase[x >> 1] = (uint8_t)((s[0] >> 4) | (s[1] & 0xF0));
+    }
+    if (x == x2) {  // even trailing pixel: low nibble of its byte
+      uint8_t* p = rowBase + (x >> 1);
+      *p = (*p & 0xF0) | (src[x - x1] >> 4);
     }
   }
 
