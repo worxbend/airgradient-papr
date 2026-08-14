@@ -88,7 +88,8 @@ black/white frames).
 **Cause:** the temperature clamp — `present()` refuses to drive the waveform
 outside `kMinSafeTempC..kMaxSafeTempC` (0–50 °C) to protect the panel, and holds
 the last image. **Fix:** none needed; it resumes automatically when ambient
-(from the AirGradient temp) returns to range. (DECISIONS #3.)
+(from the AirGradient temp) returns to range. (DECISIONS gotcha #3, "LilyGo-EPD47
+has no `epd_hl_*` high-level API".)
 
 ### Missing-glyph rectangles (□) in numbers or units
 **Cause:** the custom fonts are range-limited to save flash; a needed codepoint

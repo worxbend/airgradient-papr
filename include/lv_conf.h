@@ -1,9 +1,9 @@
 /**
  * lv_conf.h — pinned LVGL 9.x config for airdeck-papr.
  *
- * Strategy: render in L8 (1 byte/px luminance), then the
- * flush_cb converts to epdiy's 4 bpp framebuffer. LV_COLOR_DEPTH 8 makes L8
- * the native render format, which is the community-proven path for e-paper.
+ * Strategy: render in L8 (1 byte/px luminance), then the flush_cb converts to
+ * epdiy's 4 bpp framebuffer. LV_COLOR_DEPTH 8 makes L8 the native render
+ * format, which is the community-proven path for e-paper.
  *
  * Anything not defined here falls back to the LVGL default in
  * lv_conf_internal.h, so this file only pins what matters for us.

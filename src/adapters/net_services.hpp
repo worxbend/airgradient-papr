@@ -1,7 +1,7 @@
 // src/adapters/net_services.hpp
-// Optional homelab services: a /health JSON endpoint and
-// ArduinoOTA. Both run inside the net task; call handle() from its loop.
-// Compiled out for the battery profile.
+// Optional homelab services: a /health JSON endpoint and ArduinoOTA. Both run
+// inside the net task; call handle() from its loop. Compiled out for the
+// battery profile.
 #pragma once
 #include <Arduino.h>
 

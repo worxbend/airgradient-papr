@@ -41,18 +41,21 @@ added `tools/pio_strip_lvgl_asm.py` (a pre-build hook) that blanks any leftover
 
 ### 3. LilyGo-EPD47 has no `epd_hl_*` high-level API
 The original design assumed the epdiy high-level API (`epd_hl_update_area`,
-`MODE_DU`, `MODE_GC16`). The pinned LilyGo fork only exposes the **classic low-level API**:
-a self-managed 4 bpp framebuffer (`EPD_WIDTH/2 * EPD_HEIGHT` bytes, `0xFF` =
-white) drawn via `epd_draw_grayscale_image(area, data)` (15-frame GC16-class
-waveform) and `epd_clear_area(area)`. `DrawMode_t` is only
+`MODE_DU`, `MODE_GC16`). The pinned LilyGo fork only exposes the **classic
+low-level API**: a self-managed 4 bpp framebuffer (`EPD_WIDTH/2 * EPD_HEIGHT`
+bytes, `0xFF` = white) drawn via `epd_draw_grayscale_image(area, data)`
+(15-frame GC16-class waveform) and `epd_clear_area(area)`. `DrawMode_t` is only
 `BLACK_ON_WHITE / WHITE_ON_WHITE / WHITE_ON_BLACK` — there is no DU/GL16 enum.
 
-**Adaptation (`adapters/epd_guard.cpp`):** the guard owns the full framebuffer;
-partial refresh extracts the (even-x-aligned) dirty sub-rectangle into a scratch
-buffer, `epd_clear_area()`s it (wipes ghosting), then redraws it. The
-partial-budget (N=6) + 15-min backstop + boot-hygiene semantics are preserved. The panel has no exposed temperature-set API in this fork, so the
-0–50 °C **clamp** (refuse-and-hold) is enforced but the waveform temperature is
-not fed to the driver.
+**Adaptation (`adapters/epd_guard.cpp`) as first built:** the guard owned the
+full framebuffer; partial refresh extracted the (even-x-aligned) dirty
+sub-rectangle into a scratch buffer, `epd_clear_area()`'d it (wiping ghosting),
+then redrew it, preserving the partial-budget (N=6) + 15-min backstop +
+boot-hygiene semantics — **all of that partial-refresh machinery has since been
+removed** (see "Panel guard cleanups" below); `present()` is full-refresh-only
+today. Still true: the panel has no exposed temperature-set API in this fork,
+so the 0–50 °C **clamp** (refuse-and-hold) is enforced but the waveform
+temperature is not fed to the driver.
 
 ### 4. Pixel packing (verified against `epd_draw_pixel`)
 4 bpp, 2 px/byte: even x → low nibble = `color >> 4`; odd x → high nibble =
@@ -61,8 +64,9 @@ not fed to the driver.
 
 ## Deliberate MVP simplifications
 
-- **Fonts:** the hero value is 40 px (down from the 96 px first drafted) — a direct user
-  call after seeing it on the panel; the space it freed shows a large clock +
+- **Fonts:** the hero value is 40 px (down from the 96 px first drafted) — a
+  direct user call after seeing it on the panel; the space it freed shows a
+  large clock +
   date instead. Custom fonts (`tools/fontgen.sh` via `lv_font_conv`) provide the
   `µg/m³`/`°C` glyphs the built-in Montserrat lacks, plus the MDI watermark
   icons. Body text still uses built-in Montserrat.

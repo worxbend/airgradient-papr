@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Reproducible font generation for airdeck-papr (fonts + icons).
+# Reproducible font generation for airdeck-papr (text fonts only — the six
+# Montserrat-Bold sizes in src/ui/fonts/; no icon glyphs are generated here).
 # Requires: node + `npm install lv_font_conv` in this tools/ dir.
 #
 #   cd tools && npm install lv_font_conv && ./fontgen.sh

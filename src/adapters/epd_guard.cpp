@@ -225,7 +225,11 @@ bool EpdGuard::repairRoutine(int cycles) {
 }
 
 void EpdGuard::powerOffForSleep() {
-  epd_poweroff_all();  // rails + peripherals down — battery + panel fix
+  // epd_poweroff_all(), not epd_poweroff(): the plain call drops only the
+  // high-voltage rails, leaving the panel's peripheral power domain energised —
+  // which both drains the battery across deep sleep and can leave the panel in
+  // a partially powered state. The _all variant shuts down everything.
+  epd_poweroff_all();
   g_panelBusy = false;
 }
 
