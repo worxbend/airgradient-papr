@@ -125,8 +125,10 @@ bool WeatherHttp::fetch(double lat, double lon, const char* city,
   }
 
   // Filter keeps only the handful of fields we need — the full j1 payload is
-  // tens of KB of hourly forecasts we must not load into RAM.
-  JsonDocument filter;
+  // tens of KB of hourly forecasts we must not load into RAM. The filter doc
+  // goes to PSRAM too: internal-DRAM churn on this (repeating) path interleaves
+  // with TLS windows and fragments the heap the panel driver needs.
+  JsonDocument filter(&adapters::psramJson());
   JsonObject fc = filter["current_condition"][0].to<JsonObject>();
   fc["temp_C"] = true;
   fc["FeelsLikeC"] = true;

@@ -37,7 +37,14 @@ class EpdGuard {
   // spawns two 8 KB FreeRTOS worker tasks per frame; if that xTaskCreate fails
   // under low heap the draw blocks forever on a semaphore (see handbook ch. 03
   // and DECISIONS "white-screen hang"). Keep the region dirty and retry later.
-  static constexpr uint32_t kMinHeapForRefresh = 55000u;
+  //
+  // 35 KB, not more: the real requirement is the CONTIGUOUS check below (two
+  // 8 KB stacks + TCBs); this total-free check is only a sanity margin. It
+  // used to be 55000, which steady-state internal DRAM can drift under with
+  // zero fragmentation (the driver alone pins a 64 KB internal LUT; Wi-Fi +
+  // WebServer + OTA + mDNS take the rest) — closing the gate permanently and
+  // freezing the screen while everything else keeps running.
+  static constexpr uint32_t kMinHeapForRefresh = 35000u;
 
   // ...and total free heap is not enough on its own: a task stack must come out
   // of ONE contiguous internal block. After days of `String`/mbedTLS churn the
@@ -126,6 +133,14 @@ class EpdGuard {
   uint32_t deferredRateLimit() const { return deferredRate_; }
   uint32_t deferredLowHeap() const { return deferredHeap_; }
   uint32_t deferredTemp() const { return deferredTemp_; }
+  // How long the heap gate has been continuously blocking a pending push
+  // (0 = not currently starved). The composition root watches this and
+  // reboots past a threshold: fragmentation heals with a reboot, never by
+  // waiting — without this backstop a closed gate is a silent, permanent
+  // freeze with Wi-Fi still up (the observed "static picture" failure).
+  uint32_t heapStarvedMs() const {
+    return heapBlocked_ ? (uint32_t)(millis() - heapBlockedSinceMs_) : 0;
+  }
   uint32_t lastRefreshMs() const { return lastRefreshDurMs_; }
   uint32_t maxRefreshMs() const { return maxRefreshDurMs_; }
 
@@ -140,6 +155,8 @@ class EpdGuard {
   float tempC_ = NAN;
   uint32_t tempSetMs_ = 0;
   bool tempBlocking_ = false;  // edge-detect, so the clamp logs once not forever
+  bool heapBlocked_ = false;   // heap gate currently starving a pending push
+  uint32_t heapBlockedSinceMs_ = 0;  // when the current starve streak began
 
   // ---- rate limiter -------------------------------------------------------
   uint32_t minIntervalMs_ = 60000;      // once-per-minute floor

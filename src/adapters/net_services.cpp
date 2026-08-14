@@ -26,7 +26,7 @@ void handleHealth() {
       MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   uint32_t netAgo = h.netTickMs ? (millis() - h.netTickMs) / 1000 : 0;
 
-  char buf[768];
+  char buf[896];
   int n = snprintf(buf, sizeof(buf),
                    "{"
                    "\"uptime_s\":%lu,"
@@ -44,6 +44,8 @@ void handleHealth() {
                    "\"refresh_deferred_rate\":%lu,"
                    "\"refresh_deferred_heap\":%lu,"
                    "\"refresh_deferred_temp\":%lu,"
+                   "\"refresh_starved_s\":%lu,"
+                   "\"net_stack_min_free\":%lu,"
                    "\"last_refresh_ms\":%lu,"
                    "\"max_refresh_ms\":%lu,"
                    "\"sensor_fw\":\"%s\","
@@ -59,6 +61,8 @@ void handleHealth() {
                    (unsigned long)h.refreshDeferredRate,
                    (unsigned long)h.refreshDeferredHeap,
                    (unsigned long)h.refreshDeferredTemp,
+                   (unsigned long)(h.refreshStarvedMs / 1000),
+                   (unsigned long)h.netStackMinFree,
                    (unsigned long)h.lastRefreshMs,
                    (unsigned long)h.maxRefreshMs, h.sensorFirmware,
                    WiFi.localIP().toString().c_str());

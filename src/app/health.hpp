@@ -19,6 +19,13 @@ struct HealthStats {
   volatile uint32_t refreshDeferredTemp = 0;  // blocked by the 0..50 C clamp
   volatile uint32_t lastRefreshMs = 0;        // duration of the last push
   volatile uint32_t maxRefreshMs = 0;
+  // How long the heap gate has been continuously starving a pending refresh
+  // (0 = not starved). Climbing toward kRefreshStarveRebootSeconds = the
+  // "frozen screen" failure in progress.
+  volatile uint32_t refreshStarvedMs = 0;
+  // Net-task stack low-water mark, bytes. A silent stack overflow corrupts
+  // heap headers and mimics heap-gate starvation — this rules it out.
+  volatile uint32_t netStackMinFree = 0;
   // Liveness beacon written by the net task; the UI task reboots the board if
   // this stops advancing (a wedged socket/TLS session would otherwise look
   // exactly like a healthy but permanently "Stale" screen).

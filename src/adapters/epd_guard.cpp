@@ -129,7 +129,10 @@ bool EpdGuard::tempClampBlocks() {
 
 void EpdGuard::present(bool forceFull) {
   if (forceFull) pendingForce_ = true;
-  if (!dirty_ && !pendingForce_) return;
+  if (!dirty_ && !pendingForce_) {
+    heapBlocked_ = false;  // nothing pending — the screen is current
+    return;
+  }
 
   // Rate limit (the once-per-minute rule). The framebuffer already holds the
   // newest image and `dirty_` stays set, so tick() re-enters here and pushes
@@ -154,8 +157,24 @@ void EpdGuard::present(bool forceFull) {
   // retry when heap recovers (tick() calls again shortly).
   if (ESP.getFreeHeap() < kMinHeapForRefresh ||
       largestInternalBlock() < kMinContiguousForRefresh) {
+    if (!heapBlocked_) {
+      // Log once per starve streak, not per deferred tick — this gate closing
+      // silently is exactly how a "connected but frozen screen" hides.
+      heapBlocked_ = true;
+      heapBlockedSinceMs_ = millis();
+      Serial.printf("[epd] refresh deferred: internal heap low (free %u, "
+                    "largest block %lu) — holding last image until it recovers\n",
+                    (unsigned)ESP.getFreeHeap(),
+                    (unsigned long)largestInternalBlock());
+    }
     deferredHeap_++;
     return;
+  }
+  if (heapBlocked_) {
+    heapBlocked_ = false;
+    Serial.printf("[epd] heap recovered after %lus — refreshing again\n",
+                  (unsigned long)((uint32_t)(millis() - heapBlockedSinceMs_) /
+                                  1000));
   }
 
   // Full refresh for every update (partial updates are disabled by request):

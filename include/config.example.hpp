@@ -62,8 +62,14 @@ constexpr uint32_t kDeGhostRefreshSeconds = 3600;  // hourly
 // Must comfortably exceed the worst-case refresh (~1-2 s).
 constexpr uint32_t kWatchdogSeconds = 60;
 // Reboot if the net task stops making progress for this long (worst legitimate
-// case is a 3x-retried wttr.in fetch at 15 s each plus a connect window).
+// case is a retried wttr.in fetch plus a connect window).
 constexpr uint32_t kNetStallRebootSeconds = 600;
+// Reboot if the panel's heap gate has been continuously starving a pending
+// refresh for this long. Internal-DRAM fragmentation only ever heals with a
+// reboot — without this backstop a permanently closed gate is a silent,
+// forever-frozen screen with Wi-Fi still up. Transient TLS spikes clear in
+// seconds, so 10 minutes of continuous starvation means it is not coming back.
+constexpr uint32_t kRefreshStarveRebootSeconds = 600;
 
 // ---- Behaviour -------------------------------------------------------------
 constexpr uint32_t kPollSeconds = 30;    // 15..300

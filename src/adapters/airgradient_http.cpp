@@ -5,6 +5,8 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 
+#include "adapters/psram_http.hpp"
+
 namespace adapters {
 
 namespace {
@@ -40,8 +42,11 @@ bool AirGradientHttp::poll(domain::Measurement& out) {
     return false;
   }
 
-  // Response is small (~1 KB). Filter keeps only fields we model.
-  JsonDocument filter;
+  // Response is small (~1 KB). Filter keeps only fields we model. Both docs
+  // parse into PSRAM: this path runs every 30 s, and even a few KB of
+  // internal-DRAM churn here interleaves with TLS handshake windows and
+  // fragments the heap the panel driver's worker stacks need.
+  JsonDocument filter(&psramJson());
   for (const char* k : {"rco2",       "pm01",
                         "pm02",       "pm10",
                         "pm003Count", "pm003_count",
@@ -56,7 +61,7 @@ bool AirGradientHttp::poll(domain::Measurement& out) {
     filter[k] = true;
   }
 
-  JsonDocument doc;
+  JsonDocument doc(&psramJson());
   DeserializationError jerr = deserializeJson(
       doc, http.getStream(), DeserializationOption::Filter(filter));
   http.end();

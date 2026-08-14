@@ -9,8 +9,12 @@
 namespace adapters {
 
 bool CurrencyHttp::tlsGet(const char* url, PsramBody& body, uint32_t timeoutMs) {
+  // 2 attempts, not 3: each TLS handshake takes ~45 KB of INTERNAL DRAM
+  // (mbedTLS is pinned internal on this build) — every extra attempt is
+  // another window in which a long-lived allocation can pin a fragment and
+  // close the panel's heap gate. A failed cycle just retries in 30 min.
   return httpGetToPsram(url, body, /*tls=*/true, /*connectTimeoutMs=*/6000,
-                        timeoutMs, /*attempts=*/3, /*userAgent=*/nullptr, err_,
+                        timeoutMs, /*attempts=*/2, /*userAgent=*/nullptr, err_,
                         sizeof(err_));
 }
 
@@ -30,7 +34,7 @@ bool CurrencyHttp::fetch(domain::Currency& out) {
     return false;
   }
   {
-    JsonDocument filter;
+    JsonDocument filter(&psramJson());  // keep even the filter out of DRAM
     JsonObject f = filter[0].to<JsonObject>();
     f["cc"] = true;
     f["rate"] = true;
@@ -87,7 +91,7 @@ bool CurrencyHttp::fetch(domain::Currency& out) {
              "order=asc&json",
              start, end);
     if (tlsGet(url, body)) {
-      JsonDocument filter;
+      JsonDocument filter(&psramJson());
       filter[0]["rate"] = true;
       JsonDocument doc(&psramJson());
       if (!deserializeJson(doc, body.c_str(), body.length(),

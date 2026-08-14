@@ -153,8 +153,17 @@ static void netTask(void*) {
   uint32_t lastPoll = 0, lastWeather = 0, lastCurrency = 0;
   bool geoDone = false;
   double lat = 0, lon = 0;
+  uint32_t lastStackCheck = 0;
   for (;;) {
     app::g_health.netTickMs = millis();  // liveness beacon (watched by loop())
+
+    // Stack low-water mark every ~10 s (the call scans the stack — too costly
+    // for every 50 ms pass). ESP-IDF returns bytes, not FreeRTOS words.
+    if ((uint32_t)(millis() - lastStackCheck) >= 10000) {
+      lastStackCheck = millis();
+      app::g_health.netStackMinFree =
+          (uint32_t)uxTaskGetStackHighWaterMark(nullptr);
+    }
 
     bool connected = wifi.ensureConnected();
     snap.rssi = wifi.rssi();
@@ -346,6 +355,20 @@ void loop() {
   app::g_health.refreshDeferredTemp = g_guard.deferredTemp();
   app::g_health.lastRefreshMs = g_guard.lastRefreshMs();
   app::g_health.maxRefreshMs = g_guard.maxRefreshMs();
+  app::g_health.refreshStarvedMs = g_guard.heapStarvedMs();
+
+  // Refresh-starvation backstop, symmetric with the net-stall watchdog below.
+  // The heap gate deferring is normal for seconds (a TLS handshake in flight);
+  // deferring CONTINUOUSLY for minutes means internal DRAM is fragmented for
+  // good, and only a reboot heals that. Without this, the failure mode is a
+  // healthy-looking device showing a stale image forever.
+  const uint32_t starved = g_guard.heapStarvedMs();
+  if (starved > cfg::kRefreshStarveRebootSeconds * 1000UL) {
+    Serial.printf("[fatal] refresh starved by heap gate for %lus — rebooting\n",
+                  (unsigned long)(starved / 1000));
+    Serial.flush();
+    esp_restart();
+  }
 
   // Net-task stall watchdog. The task WDT only covers this task; a socket or
   // TLS session wedged inside HTTPClient would otherwise leave a healthy-looking
