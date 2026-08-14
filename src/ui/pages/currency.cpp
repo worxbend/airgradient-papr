@@ -99,10 +99,12 @@ void update(const app::Snapshot& s) {
     return;
   }
 
+  // Every row gets an isnan guard: fetch() only validates usdUah, so any other
+  // rate can be NAN with c.valid still true — %f would print a literal "nan".
   snprintf(b, sizeof(b), "%.2f", c.usdUah);
-  theme::setText(rUsd.value, b);
+  theme::setText(rUsd.value, isnan(c.usdUah) ? "--" : b);
   snprintf(b, sizeof(b), "%.2f", c.eurUah);
-  theme::setText(rEur.value, b);
+  theme::setText(rEur.value, isnan(c.eurUah) ? "--" : b);
   snprintf(b, sizeof(b), "%.3f", c.cnyUsd);
   theme::setText(rCny.value, isnan(c.cnyUsd) ? "--" : b);
   snprintf(b, sizeof(b), "%.0f", c.btcUsd);

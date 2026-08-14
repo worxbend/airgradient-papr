@@ -189,7 +189,11 @@ void setDots(DotGauge& g, float v, Band band) {
   char b[24];
   fmt1(b, sizeof(b), v);
   theme::setText(g.value, b);
-  const char* sym = (band <= Band::Moderate) ? LV_SYMBOL_OK : LV_SYMBOL_WARNING;
+  // NoData ranks above Hazardous numerically — without its own case a missing
+  // reading would show the warning triangle next to "--".
+  const char* sym = (band == Band::NoData)     ? ""
+                    : (band <= Band::Moderate) ? LV_SYMBOL_OK
+                                               : LV_SYMBOL_WARNING;
   theme::setText(g.badgeSym, sym);
 
   int filled = 0;

@@ -24,8 +24,12 @@ Btn Buttons::poll() {
       tChange_[i] = now;
     }
     if (now - tChange_[i] >= kDebounceMs && stable_[i] != lastRead_[i]) {
+      // Only one event per poll: if another pin already claimed this call,
+      // leave this pin's stable_ uncommitted so its edge is emitted on the
+      // next poll instead of being silently swallowed.
+      if (lastRead_[i] == false && event != Btn::None) continue;
       stable_[i] = lastRead_[i];
-      if (stable_[i] == false && event == Btn::None) {  // falling edge = press
+      if (stable_[i] == false) {  // falling edge = press
         event = (i == 0) ? Btn::Left : (i == 1) ? Btn::Mid : Btn::Right;
       }
     }

@@ -69,7 +69,10 @@ inline lv_obj_t* pill(lv_obj_t* parent, const lv_font_t* font) {
 }
 
 inline void pillText(lv_obj_t* p, const char* txt) {
-  lv_label_set_text((lv_obj_t*)lv_obj_get_user_data(p), txt);
+  // Same unchanged-text guard as setText: an unconditional set invalidates the
+  // label every call, and with partial updates disabled any dirty label costs a
+  // whole-panel GC16 at the next allowed slot.
+  setText((lv_obj_t*)lv_obj_get_user_data(p), txt);
 }
 
 // A page-header bar: title pill (left) + a small right-aligned status label

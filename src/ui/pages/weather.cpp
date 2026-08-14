@@ -251,9 +251,12 @@ void update(const app::Snapshot& s) {
     }
   }
 
-  // 3-DAY range bars
+  // 3-DAY range bars. wttr.in can omit maxtempC/mintempC for a day, which
+  // parses to NAN — a NAN must never reach the (int) casts below (NAN-to-int
+  // conversion is undefined behavior), so such days render text-only.
   float gmin = 1e9, gmax = -1e9;
   for (int i = 0; i < w.nDays; ++i) {
+    if (isnan(w.days[i].tMin) || isnan(w.days[i].tMax)) continue;
     if (w.days[i].tMin < gmin) gmin = w.days[i].tMin;
     if (w.days[i].tMax > gmax) gmax = w.days[i].tMax;
   }
@@ -263,10 +266,14 @@ void update(const app::Snapshot& s) {
       const domain::FcDay& d = w.days[i];
       theme::setText(dr[i].name, d.name);
       snprintf(b, sizeof(b), "%.0f\xC2\xB0", d.tMin);
-      theme::setText(dr[i].lo, b);
+      theme::setText(dr[i].lo, isnan(d.tMin) ? "--" : b);
       snprintf(b, sizeof(b), "%.0f\xC2\xB0", d.tMax);
-      theme::setText(dr[i].hi, b);
+      theme::setText(dr[i].hi, isnan(d.tMax) ? "--" : b);
       theme::setText(dr[i].cond, d.cond);
+      if (isnan(d.tMin) || isnan(d.tMax) || gmax <= gmin - 1) {
+        lv_obj_add_flag(dr[i].track, LV_OBJ_FLAG_HIDDEN);
+        continue;
+      }
       int x0 = (int)((d.tMin - gmin) / span * (TRACK_W - 4));
       int x1 = (int)((d.tMax - gmin) / span * (TRACK_W - 4));
       int wdt = x1 - x0;
