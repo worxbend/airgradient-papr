@@ -226,7 +226,8 @@ static void netTask(void*) {
         strlcpy(app::g_health.sensorFirmware, m.firmware,
                 sizeof(app::g_health.sensorFirmware));
         Serial.printf("[net] ok #%lu  CO2=%.0f PM2.5=%.1f T=%.1f RH=%.0f\n",
-                      (unsigned long)snap.pollCount, m.rco2, m.pm02, m.tempC(),
+                      (unsigned long)snap.pollCount, m.rco2, m.pm25(),
+                      m.tempC(),
                       m.humidity());
       } else {
         snap.consecutiveFail++;
@@ -436,7 +437,7 @@ static uint32_t measurementSignature(const domain::Measurement& m) {
     return domain::has(v) ? (int32_t)lroundf(v * scale) : INT32_MIN;
   };
   const int32_t fields[] = {
-      q(m.rco2, 1),       q(m.pm02, 10),     q(m.tempC(), 1),
+      q(m.rco2, 1),       q(m.pm25(), 10),   q(m.tempC(), 1),
       q(m.humidity(), 1), q(m.tvocIndex, 1), q(m.noxIndex, 1),
       q(m.pm01, 10),      q(m.pm10, 10),     q(m.pm003Count, 1),
   };
@@ -546,8 +547,8 @@ void setup() {
       snap.pollCount = 1;
       g_guard.setAmbientTempC(m.tempC());
       pollOk = true;
-      Serial.printf("[net] ok  CO2=%.0f PM2.5=%.1f T=%.1f\n", m.rco2, m.pm02,
-                    m.tempC());
+      Serial.printf("[net] ok  CO2=%.0f PM2.5=%.1f T=%.1f\n", m.rco2,
+                    m.pm25(), m.tempC());
     } else {
       snap.state = app::NetState::Offline;
       Serial.printf("[net] poll failed: %s\n", source.lastError());

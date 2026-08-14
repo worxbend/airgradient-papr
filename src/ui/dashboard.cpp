@@ -287,7 +287,7 @@ void update(const app::Snapshot& s) {
   }
 
   setArc(gCo2, m.rco2, bandCo2(m.rco2));
-  setDots(gPm, m.pm02, bandPm25(m.pm02));
+  setDots(gPm, m.pm25(), bandPm25(m.pm25()));
 
   fmt0(b, sizeof(b), m.tempC());
   theme::setText(tTemp.value, b);

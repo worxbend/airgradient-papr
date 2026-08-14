@@ -98,6 +98,15 @@ void test_hero_priority_tiebreak() {
   TEST_ASSERT_TRUE(heroMetric(m) == MetricId::TVOC);
 }
 
+// The AirGradient's own display shows EPA-compensated PM2.5; papr must agree.
+void test_pm25_prefers_compensated() {
+  Measurement m;
+  m.pm02 = 0.67f;
+  TEST_ASSERT_EQUAL_FLOAT(0.67f, m.pm25());  // raw only -> raw
+  m.pm02Compensated = 7.37f;
+  TEST_ASSERT_EQUAL_FLOAT(7.37f, m.pm25());  // compensated wins when present
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_aqi_bounds);
@@ -108,5 +117,6 @@ int main(int, char**) {
   RUN_TEST(test_ring_wraps_and_minmax);
   RUN_TEST(test_hero_picks_worst);
   RUN_TEST(test_hero_priority_tiebreak);
+  RUN_TEST(test_pm25_prefers_compensated);
   return UNITY_END();
 }

@@ -16,7 +16,8 @@ inline bool has(float v) {
 struct Measurement {
   float rco2 = NAN;             // CO2, ppm
   float pm01 = NAN;             // PM1.0, µg/m³
-  float pm02 = NAN;             // PM2.5, µg/m³
+  float pm02 = NAN;             // PM2.5, µg/m³ (raw Plantower reading)
+  float pm02Compensated = NAN;  // PM2.5 with the EPA 2021 correction applied
   float pm10 = NAN;             // PM10, µg/m³
   float pm003Count = NAN;       // particle count 0.3µm
   float atmp = NAN;             // temperature, °C (raw)
@@ -38,11 +39,14 @@ struct Measurement {
   bool valid = false;  // true once a poll parsed successfully
   uint32_t ageMs = 0;  // millis() when captured (filled by adapter)
 
-  // Prefer compensated readings when present.
+  // Prefer compensated readings when present. The AirGradient's own display
+  // shows the compensated values (its firmware applies the EPA 2021 correction
+  // to PM2.5), so preferring raw here would make the two screens disagree.
   float tempC() const { return has(atmpCompensated) ? atmpCompensated : atmp; }
   float humidity() const {
     return has(rhumCompensated) ? rhumCompensated : rhum;
   }
+  float pm25() const { return has(pm02Compensated) ? pm02Compensated : pm02; }
 };
 
 }  // namespace domain

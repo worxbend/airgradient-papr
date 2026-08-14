@@ -48,7 +48,8 @@ bool AirGradientHttp::poll(domain::Measurement& out) {
   // fragments the heap the panel driver's worker stacks need.
   JsonDocument filter(&psramJson());
   for (const char* k : {"rco2",       "pm01",
-                        "pm02",       "pm10",
+                        "pm02",       "pm02Compensated",
+                        "pm10",
                         "pm003Count", "pm003_count",
                         "atmp",       "atmpCompensated",
                         "rhum",       "rhumCompensated",
@@ -75,6 +76,7 @@ bool AirGradientHttp::poll(domain::Measurement& out) {
   m.rco2 = getf(doc, "rco2");
   m.pm01 = getf(doc, "pm01");
   m.pm02 = getf(doc, "pm02");
+  m.pm02Compensated = getf(doc, "pm02Compensated");
   m.pm10 = getf(doc, "pm10");
   // Tolerant of both key spellings across firmware versions.
   m.pm003Count = doc["pm003Count"].is<float>() ? doc["pm003Count"].as<float>()

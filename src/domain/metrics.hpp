@@ -51,7 +51,7 @@ inline float value(const Measurement& m, MetricId id) {
     case MetricId::CO2:
       return m.rco2;
     case MetricId::PM25:
-      return m.pm02;
+      return m.pm25();
     case MetricId::TVOC:
       return m.tvocIndex;
     case MetricId::NOX:
@@ -76,7 +76,7 @@ inline Band band(const Measurement& m, MetricId id) {
     case MetricId::CO2:
       return bandCo2(m.rco2);
     case MetricId::PM25:
-      return bandPm25(m.pm02);
+      return bandPm25(m.pm25());
     case MetricId::TVOC:
       return bandTvoc(m.tvocIndex);
     case MetricId::NOX:
