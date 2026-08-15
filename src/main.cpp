@@ -43,6 +43,12 @@
 #include "app/power.hpp"
 #endif
 
+// Injected by tools/pio_version_stamp.py (tag on releases, `git describe`
+// otherwise); the fallback covers builds outside PlatformIO (IDE indexers).
+#ifndef AIRDECK_VERSION
+#define AIRDECK_VERSION "dev"
+#endif
+
 static adapters::EpdGuard g_guard;
 static lv_display_t* g_disp = nullptr;
 
@@ -263,7 +269,8 @@ void setup() {
   delay(200);
   const esp_reset_reason_t why = esp_reset_reason();
   app::g_health.resetReason = (uint32_t)why;
-  Serial.printf("\n[airdeck] boot (USB profile) — last reset: %s\n",
+  Serial.printf("\n[airdeck " AIRDECK_VERSION
+                "] boot (USB profile) — last reset: %s\n",
                 resetReasonName(why));
 
   if (!bringUpDisplay()) {
@@ -483,7 +490,7 @@ void setup() {
   Serial.begin(115200);
   delay(50);  // enough for the UART to settle; 200 ms was pure awake-time tax
   app::g_health.resetReason = (uint32_t)esp_reset_reason();
-  Serial.println("\n[airdeck] wake (battery profile)");
+  Serial.println("\n[airdeck " AIRDECK_VERSION "] wake (battery profile)");
 
   // A cold boot (power-on / reset) clears the panel; a timer wake keeps the
   // existing image so an unchanged reading can skip the refresh entirely.

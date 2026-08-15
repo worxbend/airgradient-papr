@@ -3,21 +3,55 @@ name: 🛠️ CI
 on:
   push:
     branches: [main]
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
   pull_request:
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
   workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
+  # ── Workflow lint: the pipeline checks itself ──────────────────────────────
+  actionlint:
+    name: 🔎 actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Lint GitHub Actions workflows
+        run: docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:latest -color
+
+  # ── Formatting gate (pinned clang-format, blocking) ────────────────────────
+  format:
+    name: 🎨 clang-format (18.1.8, gating)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      # Pinned via pip so local `pip install clang-format==18.1.8` reproduces
+      # CI exactly — apt's clang-format version drifts between runner images,
+      # which is why this check used to be advisory. Pinned, a failure means
+      # real style drift, never version skew.
+      - name: Install pinned clang-format
+        run: pip install clang-format==18.1.8
+      - name: Check formatting
+        run: |
+          find src include test -regex '.*\.\(cpp\|hpp\|h\)$' -print0 \
+            | xargs -0 clang-format --dry-run --Werror
+
   # ── Host unit tests for the pure domain/ layer (fast, no hardware) ─────────
   unit-tests:
     name: 🧪 Domain unit tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Cache PlatformIO
@@ -27,22 +61,58 @@ jobs:
             ~/.platformio
             ~/.cache/pip
           key: pio-test-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-test-
       - name: Install PlatformIO
         run: pip install --upgrade platformio
       - name: Run tests
         run: pio test -e native-test -v
 
-  # ── Firmware build matrix (device envs) ───────────────────────────────────
+  # ── Static analysis (cppcheck via pio check, blocking on medium+high) ──────
+  # Runs on the default env only: the -batt env shares the same sources plus
+  # one define, so scanning both doubles the time for near-zero new findings.
+  # cppcheck flags (libdeps suppression etc.) live in platformio.ini so local
+  # `pio check` runs behave identically to CI.
+  static-check:
+    name: 🕵️ pio check (cppcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-check-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-check-
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+      - name: Provision placeholder config
+        run: cp include/config.example.hpp include/config.hpp
+      - name: Static analysis
+        run: >
+          pio check -e t5-epd47-v1
+          --fail-on-defect=high --fail-on-defect=medium
+
+  # ── Firmware build matrix (device envs) ────────────────────────────────────
   build:
     name: 🔧 Build ${{ matrix.env }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # sticky size comment
     strategy:
       fail-fast: false
       matrix:
         env: [t5-epd47-v1, t5-epd47-v1-batt]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # full history so the version stamp's `git describe` sees tags
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Cache PlatformIO
@@ -52,32 +122,33 @@ jobs:
             ~/.platformio
             ~/.cache/pip
           key: pio-${{ matrix.env }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ matrix.env }}-
       - name: Install PlatformIO
         run: pip install --upgrade platformio
+      # This doubles as validation that config.example.hpp always compiles.
       - name: Provision placeholder config
         run: cp include/config.example.hpp include/config.hpp
       - name: Build
         run: pio run -e ${{ matrix.env }}
-      - name: Size report
-        run: pio run -e ${{ matrix.env }} --target size || true
+      # Reports firmware.bin against the real app0 partition (6.25 MB), not
+      # the 16 MB chip size PlatformIO's own summary uses via maximum_size.
+      - name: Generate size report
+        run: python tools/ci_size_report.py ${{ matrix.env }} > size-report.md
+      - name: Show size report in job summary
+        run: cat size-report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Post size report on PR
+        # Fork PRs run with a read-only token — skip the comment there.
+        if: >
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: size-${{ matrix.env }}
+          path: size-report.md
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
           name: firmware-${{ matrix.env }}
           path: .pio/build/${{ matrix.env }}/firmware.bin
           if-no-files-found: error
-
-  # ── Formatting check (clang-format) ───────────────────────────────────────
-  format:
-    name: 🎨 clang-format
-    runs-on: ubuntu-latest
-    # Advisory: CI's clang-format version may differ from the author's, so this
-    # reports style drift without gating the pipeline.
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - name: Check formatting
-        run: |
-          sudo apt-get update && sudo apt-get install -y clang-format
-          find src include test -regex '.*\.\(cpp\|hpp\|h\)$' \
-            | xargs clang-format --dry-run --Werror
+          retention-days: 14

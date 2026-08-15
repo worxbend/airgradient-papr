@@ -3,58 +3,134 @@ name: 🚀 Release
 on:
   push:
     tags: ["v*"]
+  # Re-release an EXISTING tag (e.g. after a workflow fix). The required tag
+  # input means a manual dispatch can never produce assets named "main" —
+  # checkout fails fast if the tag does not exist.
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)release, e.g. v1.2.0"
+        required: true
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+
 jobs:
   release:
-    name: 📦 Build & publish factory image
+    name: 📦 Build & publish flashable images
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0   # full history so version stamping sees tags
+
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          # Same key as CI's default-env build job, so a release restores the
+          # toolchain cache CI already populated instead of re-downloading it.
+          key: pio-t5-epd47-v1-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-t5-epd47-v1-
+
+      # esptool pinned <5: v5 renamed `merge_bin` to `merge-bin` and the
+      # --flash_* flags to --flash-*; the pin keeps the merge step stable.
       - name: Install PlatformIO + esptool
-        run: pip install --upgrade platformio esptool
+        run: pip install --upgrade platformio 'esptool<5'
 
       - name: Provision placeholder config
         run: cp include/config.example.hpp include/config.hpp
 
-      - name: Build firmware
-        run: pio run -e t5-epd47-v1
-
-      - name: Merge single-file factory image
+      # AIRDECK_VERSION is read by tools/pio_version_stamp.py, so release
+      # binaries report exactly their tag (not a git-describe approximation).
+      - name: Build firmware (both device profiles)
+        env:
+          AIRDECK_VERSION: ${{ env.RELEASE_TAG }}
         run: |
-          BUILD=.pio/build/t5-epd47-v1
+          pio run -e t5-epd47-v1
+          pio run -e t5-epd47-v1-batt
+
+      # Classic-ESP32 flash layout (matches default_16MB.csv + Arduino core):
+      #   0x1000  second-stage bootloader
+      #   0x8000  partition table
+      #   0xe000  boot_app0 (otadata: "boot from app0")
+      #   0x10000 application
+      - name: Merge single-file factory images
+        run: |
+          set -euo pipefail
           BOOT_APP0=$(find ~/.platformio/packages -name boot_app0.bin | head -1)
-          python -m esptool --chip esp32 merge_bin \
-            --flash_mode dio --flash_freq 40m --flash_size 16MB \
-            -o airdeck-factory-${{ github.ref_name }}.bin \
-            0x1000  "$BUILD/bootloader.bin" \
-            0x8000  "$BUILD/partitions.bin" \
-            0xe000  "$BOOT_APP0" \
-            0x10000 "$BUILD/firmware.bin"
-          cp "$BUILD/firmware.bin" airdeck-firmware-${{ github.ref_name }}.bin
+          mkdir -p dist
+          for ENV in t5-epd47-v1 t5-epd47-v1-batt; do
+            BUILD=.pio/build/$ENV
+            SUFFIX=""
+            if [ "$ENV" = "t5-epd47-v1-batt" ]; then SUFFIX="-batt"; fi
+            python -m esptool --chip esp32 merge_bin \
+              --flash_mode dio --flash_freq 40m --flash_size 16MB \
+              -o "dist/airdeck-factory${SUFFIX}-${RELEASE_TAG}.bin" \
+              0x1000  "$BUILD/bootloader.bin" \
+              0x8000  "$BUILD/partitions.bin" \
+              0xe000  "$BOOT_APP0" \
+              0x10000 "$BUILD/firmware.bin"
+            cp "$BUILD/firmware.bin" "dist/airdeck-firmware${SUFFIX}-${RELEASE_TAG}.bin"
+          done
+
+      - name: Generate checksums
+        run: cd dist && sha256sum airdeck-*.bin > SHA256SUMS
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           generate_release_notes: true
           files: |
-            airdeck-factory-${{ github.ref_name }}.bin
-            airdeck-firmware-${{ github.ref_name }}.bin
+            dist/airdeck-*.bin
+            dist/SHA256SUMS
           body: |
-            ## 🌬️ airdeck ${{ github.ref_name }}
+            ## 🌬️ airdeck ${{ env.RELEASE_TAG }}
 
-            **Flash the whole thing** (single factory image, offset 0x0):
+            ### Which file do I want?
+
+            | File | What it is | Flash offset |
+            |---|---|---|
+            | `airdeck-factory-…` | Everything in one image — mains-powered, always-on profile | `0x0` |
+            | `airdeck-factory-batt-…` | Everything in one image — battery deep-sleep profile | `0x0` |
+            | `airdeck-firmware-…` / `airdeck-firmware-batt-…` | Application only (bootloader + partition table already on the device) | `0x10000` |
+
+            ### Flash with esptool (no toolchain needed)
+
             ```bash
+            pip install esptool
             esptool.py --chip esp32 --port /dev/ttyUSB0 write_flash 0x0 \
-              airdeck-factory-${{ github.ref_name }}.bin
+              airdeck-factory-${{ env.RELEASE_TAG }}.bin
             ```
-            Remember to set your Wi-Fi + AirGradient IP in `include/config.hpp`
-            and rebuild for a personalised image — this artifact ships with
-            placeholder credentials.
+
+            ### Or build & flash from source with PlatformIO
+
+            ```bash
+            git checkout ${{ env.RELEASE_TAG }}
+            cp include/config.example.hpp include/config.hpp   # set Wi-Fi + sensor IP
+            pio run -e t5-epd47-v1 -t upload
+            ```
+
+            ### Verify your download
+
+            ```bash
+            sha256sum -c SHA256SUMS --ignore-missing
+            ```
+
+            > ⚠️ **Note:** the prebuilt images ship with **placeholder Wi-Fi
+            > credentials and sensor IP** — configuration is compile-time. Set
+            > your values in `include/config.hpp` and rebuild for a
+            > personalised image.

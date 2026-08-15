@@ -8,6 +8,11 @@
 
 #include "app/health.hpp"
 
+// Injected by tools/pio_version_stamp.py; fallback for non-PIO tooling.
+#ifndef AIRDECK_VERSION
+#define AIRDECK_VERSION "dev"
+#endif
+
 namespace adapters {
 namespace {
 
@@ -50,6 +55,7 @@ void handleHealth() {
       "\"last_refresh_ms\":%lu,"
       "\"max_refresh_ms\":%lu,"
       "\"sensor_fw\":\"%s\","
+      "\"fw_version\":\"%s\","
       "\"ip\":\"%s\""
       "}",
       (unsigned long)(millis() / 1000), (unsigned long)h.resetReason,
@@ -62,7 +68,7 @@ void handleHealth() {
       (unsigned long)h.refreshDeferredTemp,
       (unsigned long)(h.refreshStarvedMs / 1000),
       (unsigned long)h.netStackMinFree, (unsigned long)h.lastRefreshMs,
-      (unsigned long)h.maxRefreshMs, h.sensorFirmware,
+      (unsigned long)h.maxRefreshMs, h.sensorFirmware, AIRDECK_VERSION,
       WiFi.localIP().toString().c_str());
   (void)n;
   server.send(200, "application/json", buf);
