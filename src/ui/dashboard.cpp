@@ -258,9 +258,9 @@ void update(const app::Snapshot& s) {
   theme::setText(hdrLeft, b);
   // Quantise to 5 dBm. Raw RSSI wobbles by a few dB between every poll, and any
   // changed label dirties the framebuffer — which, with partial updates
-  // disabled, means a whole-panel GC16 redraw at the next allowed slot. Rounding
-  // costs nothing legible and stops the radio's noise floor from driving the
-  // refresh budget on its own.
+  // disabled, means a whole-panel GC16 redraw at the next allowed slot.
+  // Rounding costs nothing legible and stops the radio's noise floor from
+  // driving the refresh budget on its own.
   const int rssiStep = s.rssi ? ((s.rssi - 2) / 5) * 5 : 0;
   snprintf(b, sizeof(b), LV_SYMBOL_WIFI " %d dBm", rssiStep);
   theme::setText(hdrRight, b);

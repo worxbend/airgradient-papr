@@ -4,16 +4,16 @@
 // clamp, boot-hygiene and the repair routine.
 //
 // Rate limit (handbook ch. 03, "How often may we refresh?"): one full GC16
-// update costs ~47 panel frames (`epd_clear()` = 32, `epd_draw_grayscale_image()`
-// = 15), blocks the calling task for ~1 s and peaks the panel at up to 950 mW
-// (ED047TC1 datasheet §6-2). Pushing one every 30 s — which the unconditional
-// interval redraw used to do — is ~2 880 full-screen waveforms a day for a
-// clock that only changes once a minute. `present()` therefore refuses to touch
-// the panel more often than `minIntervalMs_` (default 60 s), keeps the region
-// dirty, and pushes the *latest* framebuffer at the next allowed slot. Explicit
-// user actions (a page switch) take the shorter `forcedMinIntervalMs_` path so
-// button presses still feel instant without letting a mashed button burn a
-// waveform per press.
+// update costs ~47 panel frames (`epd_clear()` = 32,
+// `epd_draw_grayscale_image()` = 15), blocks the calling task for ~1 s and
+// peaks the panel at up to 950 mW (ED047TC1 datasheet §6-2). Pushing one every
+// 30 s — which the unconditional interval redraw used to do — is ~2 880
+// full-screen waveforms a day for a clock that only changes once a minute.
+// `present()` therefore refuses to touch the panel more often than
+// `minIntervalMs_` (default 60 s), keeps the region dirty, and pushes the
+// *latest* framebuffer at the next allowed slot. Explicit user actions (a page
+// switch) take the shorter `forcedMinIntervalMs_` path so button presses still
+// feel instant without letting a mashed button burn a waveform per press.
 #pragma once
 #include <Arduino.h>
 
@@ -59,11 +59,12 @@ class EpdGuard {
   // frame instead (costs nothing on e-paper) until temperature is back in band.
   // Matches the ED047TC1 datasheet operating range (0..+50 °C).
   //
-  // CAVEAT: the reading is the AirGradient's *indoor air* temperature, used as a
-  // proxy for panel temperature. That only holds if the sensor and the panel are
-  // in the same room — which is the intended deployment, but it is an assumption,
-  // not a measurement. There is no panel thermistor on this board and this driver
-  // fork exposes no waveform temperature-set API (DECISIONS #3).
+  // CAVEAT: the reading is the AirGradient's *indoor air* temperature, used as
+  // a proxy for panel temperature. That only holds if the sensor and the panel
+  // are in the same room — which is the intended deployment, but it is an
+  // assumption, not a measurement. There is no panel thermistor on this board
+  // and this driver fork exposes no waveform temperature-set API (DECISIONS
+  // #3).
   static constexpr float kMinSafeTempC = 0.0f;
   static constexpr float kMaxSafeTempC = 50.0f;
 
@@ -119,12 +120,12 @@ class EpdGuard {
   void setAmbientTempC(float c);
 
   // Alternating black/white GC16 frames to shift stuck particles. Blocking
-  // (~2.5 s per cycle) and MUST be called from the UI task — it drives the panel
-  // directly, so calling it from the net task would race a refresh in flight.
-  // Returns false if its scratch buffer could not be allocated.
+  // (~2.5 s per cycle) and MUST be called from the UI task — it drives the
+  // panel directly, so calling it from the net task would race a refresh in
+  // flight. Returns false if its scratch buffer could not be allocated.
   bool repairRoutine(int cycles = 4);
-  void clearWhite();        // full white GC16 frame
-  void powerOffForSleep();  // epd_poweroff_all before sleep
+  void clearWhite();         // full white GC16 frame
+  void powerOffForSleep();   // epd_poweroff_all before sleep
   void markCleanShutdown();  // set NVS clean flag
 
   uint32_t fullRefreshes() const { return fullRefreshes_; }
@@ -154,12 +155,13 @@ class EpdGuard {
   int dx0_ = 0, dy0_ = 0, dx1_ = 0, dy1_ = 0;  // union rect [x0,x1)
   float tempC_ = NAN;
   uint32_t tempSetMs_ = 0;
-  bool tempBlocking_ = false;  // edge-detect, so the clamp logs once not forever
-  bool heapBlocked_ = false;   // heap gate currently starving a pending push
+  bool tempBlocking_ =
+      false;                  // edge-detect, so the clamp logs once not forever
+  bool heapBlocked_ = false;  // heap gate currently starving a pending push
   uint32_t heapBlockedSinceMs_ = 0;  // when the current starve streak began
 
   // ---- rate limiter -------------------------------------------------------
-  uint32_t minIntervalMs_ = 60000;      // once-per-minute floor
+  uint32_t minIntervalMs_ = 60000;       // once-per-minute floor
   uint32_t forcedMinIntervalMs_ = 5000;  // floor for user-initiated pushes
   uint32_t lastPresentMs_ = 0;
   bool havePresented_ = false;  // the very first frame is never rate-limited

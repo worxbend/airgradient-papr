@@ -111,16 +111,17 @@ bool WeatherHttp::fetch(double lat, double lon, const char* city,
   // writeToStream() rather than an Arduino String: getString() would grow a
   // buffer by repeated realloc in internal DRAM every 10 minutes, which is what
   // fragments the heap the panel driver needs (see adapters/psram_http.hpp).
-  // A streamed parse is still not an option — the chunk-size markers corrupt it.
-  // 2 x 10 s, not 3 x 15 s: the old worst case pinned the net task for ~63 s,
-  // starving the AirGradient poll (the actual product) and leaning on the
+  // A streamed parse is still not an option — the chunk-size markers corrupt
+  // it. 2 x 10 s, not 3 x 15 s: the old worst case pinned the net task for ~63
+  // s, starving the AirGradient poll (the actual product) and leaning on the
   // net-stall watchdog. A slow first-render wttr.in hit now just waits for the
   // next 10-minute cycle.
   adapters::PsramBody body;
-  if (!httpGetToPsram(url, body, /*tls=*/false, /*connectTimeoutMs=*/6000,
-                      /*timeoutMs=*/10000, /*attempts=*/2,
-                      /*userAgent=*/"curl/8.5.0",  // wttr.in serves JSON to curl
-                      err_, sizeof(err_))) {
+  if (!httpGetToPsram(
+          url, body, /*tls=*/false, /*connectTimeoutMs=*/6000,
+          /*timeoutMs=*/10000, /*attempts=*/2,
+          /*userAgent=*/"curl/8.5.0",  // wttr.in serves JSON to curl
+          err_, sizeof(err_))) {
     return false;
   }
 
@@ -151,10 +152,11 @@ bool WeatherHttp::fetch(double lat, double lon, const char* city,
   fh["weatherDesc"][0]["value"] = true;
 
   // Parse into PSRAM too — even filtered, the 3-day/hourly arrays are a few KB
-  // that would otherwise come out of internal DRAM while the body is still held.
+  // that would otherwise come out of internal DRAM while the body is still
+  // held.
   JsonDocument doc(&adapters::psramJson());
-  DeserializationError e = deserializeJson(doc, body.c_str(), body.length(),
-                                           DeserializationOption::Filter(filter));
+  DeserializationError e = deserializeJson(
+      doc, body.c_str(), body.length(), DeserializationOption::Filter(filter));
   if (e) {
     snprintf(err_, sizeof(err_), "wx json: %s", e.c_str());
     return false;

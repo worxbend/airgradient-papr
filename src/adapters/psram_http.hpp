@@ -5,8 +5,8 @@
 // Why this exists: `http.getString()` is the obvious way to read a body, but
 // wttr.in and bank.gov.ua answer with `Transfer-Encoding: chunked`, so there is
 // no `Content-Length` for HTTPClient to pre-reserve against. The Arduino
-// `String` therefore grows by repeated `realloc` in *internal* DRAM — tens of KB
-// at a time, every weather poll and every currency poll. That is the single
+// `String` therefore grows by repeated `realloc` in *internal* DRAM — tens of
+// KB at a time, every weather poll and every currency poll. That is the single
 // biggest source of internal-heap fragmentation in this firmware, and
 // fragmentation is what eventually starves the panel driver's 8 KB per-frame
 // `xTaskCreate` and deadlocks a refresh (handbook ch. 03, DECISIONS "Refresh
@@ -88,8 +88,8 @@ PsramJsonAllocator& psramJson();
 // backoff, since wttr.in renders on first hit and can be slow.
 //
 // `tls` selects WiFiClientSecure (setInsecure) instead of a plain WiFiClient.
-bool httpGetToPsram(const char* url, PsramBody& out, bool tls, uint32_t connectTimeoutMs,
-                    uint32_t timeoutMs, int attempts, const char* userAgent,
-                    char* err, size_t errLen);
+bool httpGetToPsram(const char* url, PsramBody& out, bool tls,
+                    uint32_t connectTimeoutMs, uint32_t timeoutMs, int attempts,
+                    const char* userAgent, char* err, size_t errLen);
 
 }  // namespace adapters

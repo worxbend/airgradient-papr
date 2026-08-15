@@ -118,9 +118,10 @@ bool EpdGuard::tempClampBlocks() {
   if (blocks != tempBlocking_) {  // edge only — this would spam every loop pass
     tempBlocking_ = blocks;
     if (blocks)
-      Serial.printf("[epd] temperature clamp ON (%.1fC outside %.0f..%.0f) — "
-                    "holding the last image\n",
-                    tempC_, kMinSafeTempC, kMaxSafeTempC);
+      Serial.printf(
+          "[epd] temperature clamp ON (%.1fC outside %.0f..%.0f) — "
+          "holding the last image\n",
+          tempC_, kMinSafeTempC, kMaxSafeTempC);
     else
       Serial.println("[epd] temperature clamp OFF — refreshing again");
   }
@@ -162,19 +163,19 @@ void EpdGuard::present(bool forceFull) {
       // silently is exactly how a "connected but frozen screen" hides.
       heapBlocked_ = true;
       heapBlockedSinceMs_ = millis();
-      Serial.printf("[epd] refresh deferred: internal heap low (free %u, "
-                    "largest block %lu) — holding last image until it recovers\n",
-                    (unsigned)ESP.getFreeHeap(),
-                    (unsigned long)largestInternalBlock());
+      Serial.printf(
+          "[epd] refresh deferred: internal heap low (free %u, "
+          "largest block %lu) — holding last image until it recovers\n",
+          (unsigned)ESP.getFreeHeap(), (unsigned long)largestInternalBlock());
     }
     deferredHeap_++;
     return;
   }
   if (heapBlocked_) {
     heapBlocked_ = false;
-    Serial.printf("[epd] heap recovered after %lus — refreshing again\n",
-                  (unsigned long)((uint32_t)(millis() - heapBlockedSinceMs_) /
-                                  1000));
+    Serial.printf(
+        "[epd] heap recovered after %lus — refreshing again\n",
+        (unsigned long)((uint32_t)(millis() - heapBlockedSinceMs_) / 1000));
   }
 
   // Full refresh for every update (partial updates are disabled by request):
@@ -187,7 +188,8 @@ void EpdGuard::present(bool forceFull) {
   g_panelBusy = false;
 
   lastRefreshDurMs_ = (uint32_t)(millis() - t0);
-  if (lastRefreshDurMs_ > maxRefreshDurMs_) maxRefreshDurMs_ = lastRefreshDurMs_;
+  if (lastRefreshDurMs_ > maxRefreshDurMs_)
+    maxRefreshDurMs_ = lastRefreshDurMs_;
 
   lastPresentMs_ = millis();
   havePresented_ = true;
@@ -239,9 +241,10 @@ bool EpdGuard::repairRoutine(int cycles) {
   heap_caps_free(solid);
 
   // The panel now holds white, not our framebuffer — force a repaint. Note we
-  // deliberately do NOT stamp lastPresentMs_: it still points at the push before
-  // the repair, which is already older than the forced floor, so the next tick()
-  // repaints immediately instead of leaving the user staring at a white screen.
+  // deliberately do NOT stamp lastPresentMs_: it still points at the push
+  // before the repair, which is already older than the forced floor, so the
+  // next tick() repaints immediately instead of leaving the user staring at a
+  // white screen.
   dirty_ = true;
   pendingForce_ = true;
   return true;

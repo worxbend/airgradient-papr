@@ -82,7 +82,8 @@ constexpr bool kFahrenheit = false;
 // wake->poll->render->deep-sleep loop, so the wake cadence dominates runtime:
 // waking every kPollSeconds (30 s) would flatten a LiPo in ~a day, so battery
 // gets its own, much longer interval. See handbook ch. 02 (Power model).
-constexpr uint32_t kBatteryPollSeconds = 900;  // wake cadence on battery (15 min)
+constexpr uint32_t kBatteryPollSeconds =
+    900;  // wake cadence on battery (15 min)
 // Even when the air reading is byte-identical to what's already on the panel,
 // force a full GC16 redraw every Nth wake — refreshes the clock and clears any
 // e-paper ghosting. 0 disables the "skip unchanged" optimisation entirely.

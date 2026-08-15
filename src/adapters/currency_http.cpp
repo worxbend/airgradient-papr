@@ -8,7 +8,8 @@
 
 namespace adapters {
 
-bool CurrencyHttp::tlsGet(const char* url, PsramBody& body, uint32_t timeoutMs) {
+bool CurrencyHttp::tlsGet(const char* url, PsramBody& body,
+                          uint32_t timeoutMs) {
   // 2 attempts, not 3: each TLS handshake takes ~45 KB of INTERNAL DRAM
   // (mbedTLS is pinned internal on this build) — every extra attempt is
   // another window in which a long-lived allocation can pin a fragment and

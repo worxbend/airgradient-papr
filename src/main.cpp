@@ -77,16 +77,26 @@ static bool bringUpDisplay(bool clearPanel = true, bool nvsHygiene = true) {
 
 static const char* resetReasonName(esp_reset_reason_t r) {
   switch (r) {
-    case ESP_RST_POWERON: return "power-on";
-    case ESP_RST_EXT: return "external";
-    case ESP_RST_SW: return "software";
-    case ESP_RST_PANIC: return "panic";
-    case ESP_RST_INT_WDT: return "int-wdt";
-    case ESP_RST_TASK_WDT: return "task-wdt";
-    case ESP_RST_WDT: return "other-wdt";
-    case ESP_RST_DEEPSLEEP: return "deep-sleep";
-    case ESP_RST_BROWNOUT: return "brownout";
-    default: return "unknown";
+    case ESP_RST_POWERON:
+      return "power-on";
+    case ESP_RST_EXT:
+      return "external";
+    case ESP_RST_SW:
+      return "software";
+    case ESP_RST_PANIC:
+      return "panic";
+    case ESP_RST_INT_WDT:
+      return "int-wdt";
+    case ESP_RST_TASK_WDT:
+      return "task-wdt";
+    case ESP_RST_WDT:
+      return "other-wdt";
+    case ESP_RST_DEEPSLEEP:
+      return "deep-sleep";
+    case ESP_RST_BROWNOUT:
+      return "brownout";
+    default:
+      return "unknown";
   }
 }
 
@@ -227,8 +237,7 @@ static void netTask(void*) {
                 sizeof(app::g_health.sensorFirmware));
         Serial.printf("[net] ok #%lu  CO2=%.0f PM2.5=%.1f T=%.1f RH=%.0f\n",
                       (unsigned long)snap.pollCount, m.rco2, m.pm25(),
-                      m.tempC(),
-                      m.humidity());
+                      m.tempC(), m.humidity());
       } else {
         snap.consecutiveFail++;
         app::g_health.consecutiveFail = snap.consecutiveFail;
@@ -282,7 +291,8 @@ void setup() {
   // armed, that deadlock reboots the board in kWatchdogSeconds instead.
   esp_task_wdt_init(cfg::kWatchdogSeconds, /*panic=*/true);
   esp_task_wdt_add(nullptr);  // subscribe the Arduino loop task
-  Serial.printf("[boot] heap free: %u  wdt: %lus\n", (unsigned)ESP.getFreeHeap(),
+  Serial.printf("[boot] heap free: %u  wdt: %lus\n",
+                (unsigned)ESP.getFreeHeap(),
                 (unsigned long)cfg::kWatchdogSeconds);
 }
 
@@ -310,9 +320,8 @@ void loop() {
 
   // De-ghost backstop: repaint the whole page periodically even if every label
   // is unchanged, to clear e-paper particle memory.
-  if (cfg::kDeGhostRefreshSeconds &&
-      (uint32_t)(millis() - lastDeGhost) >=
-          cfg::kDeGhostRefreshSeconds * 1000UL) {
+  if (cfg::kDeGhostRefreshSeconds && (uint32_t)(millis() - lastDeGhost) >=
+                                         cfg::kDeGhostRefreshSeconds * 1000UL) {
     lastDeGhost = millis();
     ui::refreshCurrent();
   }
@@ -332,8 +341,8 @@ void loop() {
       break;
   }
 
-  // De-ghost on demand (GET /repair). The endpoint runs on the net task and only
-  // raises a flag; the panel work happens here, on the task that owns it.
+  // De-ghost on demand (GET /repair). The endpoint runs on the net task and
+  // only raises a flag; the panel work happens here, on the task that owns it.
   if (adapters::netServicesTakeRepairRequest()) {
     Serial.println("[epd] de-ghost requested — running repair routine");
     if (!g_guard.repairRoutine()) Serial.println("[epd] repair: alloc failed");
@@ -372,8 +381,9 @@ void loop() {
   }
 
   // Net-task stall watchdog. The task WDT only covers this task; a socket or
-  // TLS session wedged inside HTTPClient would otherwise leave a healthy-looking
-  // but permanently stale screen with no way out but the reset button.
+  // TLS session wedged inside HTTPClient would otherwise leave a
+  // healthy-looking but permanently stale screen with no way out but the reset
+  // button.
   const uint32_t netAge = (uint32_t)(millis() - app::g_health.netTickMs);
   if (netAge > cfg::kNetStallRebootSeconds * 1000UL) {
     Serial.printf("[fatal] net task stalled %lus — rebooting\n",
@@ -547,8 +557,8 @@ void setup() {
       snap.pollCount = 1;
       g_guard.setAmbientTempC(m.tempC());
       pollOk = true;
-      Serial.printf("[net] ok  CO2=%.0f PM2.5=%.1f T=%.1f\n", m.rco2,
-                    m.pm25(), m.tempC());
+      Serial.printf("[net] ok  CO2=%.0f PM2.5=%.1f T=%.1f\n", m.rco2, m.pm25(),
+                    m.tempC());
     } else {
       snap.state = app::NetState::Offline;
       Serial.printf("[net] poll failed: %s\n", source.lastError());

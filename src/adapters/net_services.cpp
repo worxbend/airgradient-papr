@@ -27,45 +27,43 @@ void handleHealth() {
   uint32_t netAgo = h.netTickMs ? (millis() - h.netTickMs) / 1000 : 0;
 
   char buf[896];
-  int n = snprintf(buf, sizeof(buf),
-                   "{"
-                   "\"uptime_s\":%lu,"
-                   "\"reset_reason\":%lu,"
-                   "\"free_heap\":%u,"
-                   "\"min_free_heap\":%u,"
-                   "\"largest_free_block\":%lu,"
-                   "\"free_psram\":%u,"
-                   "\"rssi\":%d,"
-                   "\"poll_count\":%lu,"
-                   "\"consecutive_fail\":%lu,"
-                   "\"last_poll_ago_s\":%lu,"
-                   "\"net_tick_ago_s\":%lu,"
-                   "\"full_refreshes\":%lu,"
-                   "\"refresh_deferred_rate\":%lu,"
-                   "\"refresh_deferred_heap\":%lu,"
-                   "\"refresh_deferred_temp\":%lu,"
-                   "\"refresh_starved_s\":%lu,"
-                   "\"net_stack_min_free\":%lu,"
-                   "\"last_refresh_ms\":%lu,"
-                   "\"max_refresh_ms\":%lu,"
-                   "\"sensor_fw\":\"%s\","
-                   "\"ip\":\"%s\""
-                   "}",
-                   (unsigned long)(millis() / 1000),
-                   (unsigned long)h.resetReason, (unsigned)ESP.getFreeHeap(),
-                   (unsigned)ESP.getMinFreeHeap(), (unsigned long)largest,
-                   (unsigned)ESP.getFreePsram(), h.rssi,
-                   (unsigned long)h.pollCount, (unsigned long)h.consecutiveFail,
-                   (unsigned long)lastOkAgo, (unsigned long)netAgo,
-                   (unsigned long)h.fullRefreshes,
-                   (unsigned long)h.refreshDeferredRate,
-                   (unsigned long)h.refreshDeferredHeap,
-                   (unsigned long)h.refreshDeferredTemp,
-                   (unsigned long)(h.refreshStarvedMs / 1000),
-                   (unsigned long)h.netStackMinFree,
-                   (unsigned long)h.lastRefreshMs,
-                   (unsigned long)h.maxRefreshMs, h.sensorFirmware,
-                   WiFi.localIP().toString().c_str());
+  int n = snprintf(
+      buf, sizeof(buf),
+      "{"
+      "\"uptime_s\":%lu,"
+      "\"reset_reason\":%lu,"
+      "\"free_heap\":%u,"
+      "\"min_free_heap\":%u,"
+      "\"largest_free_block\":%lu,"
+      "\"free_psram\":%u,"
+      "\"rssi\":%d,"
+      "\"poll_count\":%lu,"
+      "\"consecutive_fail\":%lu,"
+      "\"last_poll_ago_s\":%lu,"
+      "\"net_tick_ago_s\":%lu,"
+      "\"full_refreshes\":%lu,"
+      "\"refresh_deferred_rate\":%lu,"
+      "\"refresh_deferred_heap\":%lu,"
+      "\"refresh_deferred_temp\":%lu,"
+      "\"refresh_starved_s\":%lu,"
+      "\"net_stack_min_free\":%lu,"
+      "\"last_refresh_ms\":%lu,"
+      "\"max_refresh_ms\":%lu,"
+      "\"sensor_fw\":\"%s\","
+      "\"ip\":\"%s\""
+      "}",
+      (unsigned long)(millis() / 1000), (unsigned long)h.resetReason,
+      (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(),
+      (unsigned long)largest, (unsigned)ESP.getFreePsram(), h.rssi,
+      (unsigned long)h.pollCount, (unsigned long)h.consecutiveFail,
+      (unsigned long)lastOkAgo, (unsigned long)netAgo,
+      (unsigned long)h.fullRefreshes, (unsigned long)h.refreshDeferredRate,
+      (unsigned long)h.refreshDeferredHeap,
+      (unsigned long)h.refreshDeferredTemp,
+      (unsigned long)(h.refreshStarvedMs / 1000),
+      (unsigned long)h.netStackMinFree, (unsigned long)h.lastRefreshMs,
+      (unsigned long)h.maxRefreshMs, h.sensorFirmware,
+      WiFi.localIP().toString().c_str());
   (void)n;
   server.send(200, "application/json", buf);
 }

@@ -137,8 +137,8 @@ void build() {
   buildSplash();
 
   app::Snapshot empty;
-  update(empty);       // seed page fallbacks
-  ready = false;       // (update() may have flipped it on the empty seed)
+  update(empty);        // seed page fallbacks
+  ready = false;        // (update() may have flipped it on the empty seed)
   pageChanged = false;  // ...and with it, marked a page switch
   cur = PAGE_AQ;
   splashStart = millis();

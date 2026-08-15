@@ -47,17 +47,27 @@ bool AirGradientHttp::poll(domain::Measurement& out) {
   // internal-DRAM churn here interleaves with TLS handshake windows and
   // fragments the heap the panel driver's worker stacks need.
   JsonDocument filter(&psramJson());
-  for (const char* k : {"rco2",       "pm01",
-                        "pm02",       "pm02Compensated",
+  for (const char* k : {"rco2",
+                        "pm01",
+                        "pm02",
+                        "pm02Compensated",
                         "pm10",
-                        "pm003Count", "pm003_count",
-                        "atmp",       "atmpCompensated",
-                        "rhum",       "rhumCompensated",
-                        "tvocIndex",  "tvocRaw",
-                        "noxIndex",   "noxRaw",
-                        "wifi",       "boot",
-                        "bootCount",  "firmware",
-                        "model",      "serialno",
+                        "pm003Count",
+                        "pm003_count",
+                        "atmp",
+                        "atmpCompensated",
+                        "rhum",
+                        "rhumCompensated",
+                        "tvocIndex",
+                        "tvocRaw",
+                        "noxIndex",
+                        "noxRaw",
+                        "wifi",
+                        "boot",
+                        "bootCount",
+                        "firmware",
+                        "model",
+                        "serialno",
                         "ledMode"}) {
     filter[k] = true;
   }
