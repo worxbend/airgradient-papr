@@ -7,7 +7,9 @@
 #include <math.h>
 #include <time.h>
 
+#include "app/clock.hpp"
 #include "ui/fonts/fonts.hpp"
+#include "ui/format.hpp"
 #include "ui/pages.hpp"
 #include "ui/theme.hpp"
 
@@ -51,30 +53,28 @@ DayRow dr[3];
 
 constexpr int TRACK_W = 430;
 
-lv_obj_t* badge(lv_obj_t* parent, const lv_font_t* font) {
-  lv_obj_t* p = lv_obj_create(parent);
-  lv_obj_set_size(p, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-  lv_obj_set_style_bg_color(p, lv_color_black(), 0);
-  lv_obj_set_style_bg_opa(p, LV_OPA_COVER, 0);
-  lv_obj_set_style_radius(p, 6, 0);
-  lv_obj_set_style_border_width(p, 0, 0);
-  lv_obj_set_style_pad_hor(p, 7, 0);
-  lv_obj_set_style_pad_ver(p, 2, 0);
-  lv_obj_clear_flag(p, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_t* t = theme::label(p, font, lv_color_white());
-  lv_obj_center(t);
-  lv_obj_set_user_data(p, t);
-  return p;
-}
-void badgeText(lv_obj_t* b, const char* s) {
-  theme::setText((lv_obj_t*)lv_obj_get_user_data(b), s);
-}
-
 lv_obj_t* cap(lv_obj_t* card, const char* txt) {
   lv_obj_t* c = theme::label(card, &lv_font_montserrat_16);
   theme::setText(c, txt);
   lv_obj_align(c, LV_ALIGN_TOP_LEFT, 0, 0);
   return c;
+}
+
+// Blank one hourly column / one forecast row. Both the whole-page "no data"
+// path and the per-slot "fewer slots than widgets" path need exactly this, so
+// it lives in one place.
+void clearHour(int i) {
+  theme::setText(hc[i].label, "");
+  theme::setText(hc[i].t, "");
+  lv_obj_add_flag(hc[i].uv, LV_OBJ_FLAG_HIDDEN);
+}
+
+void clearDay(int i) {
+  theme::setText(dr[i].name, "");
+  theme::setText(dr[i].lo, "");
+  theme::setText(dr[i].hi, "");
+  theme::setText(dr[i].cond, "");
+  lv_obj_add_flag(dr[i].track, LV_OBJ_FLAG_HIDDEN);
 }
 
 }  // namespace
@@ -116,7 +116,8 @@ lv_obj_t* build() {
   lv_obj_align(uvWin, LV_ALIGN_BOTTOM_LEFT, 0, 0);
 
   // ---- Band B: HOURLY ----
-  lv_obj_t* cHour = theme::card(scr, 8, 242, 944, 130);
+  lv_obj_t* cHour =
+      theme::card(scr, theme::kMargin, 242, theme::kContentW, 130);
   cap(cHour, "HOURLY");
   for (int i = 0; i < 8; ++i) {
     int x = 4 + i * 115;
@@ -128,12 +129,12 @@ lv_obj_t* build() {
     lv_obj_set_width(hc[i].t, 108);
     lv_obj_set_style_text_align(hc[i].t, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(hc[i].t, LV_ALIGN_TOP_LEFT, x, 62);
-    hc[i].uv = badge(cHour, &lv_font_montserrat_14);
+    hc[i].uv = theme::badge(cHour, &lv_font_montserrat_14);
     lv_obj_align(hc[i].uv, LV_ALIGN_TOP_LEFT, x + 32, 96);
   }
 
   // ---- Band C: 3-DAY ----
-  lv_obj_t* cDay = theme::card(scr, 8, 380, 944, 144);
+  lv_obj_t* cDay = theme::card(scr, theme::kMargin, 380, theme::kContentW, 144);
   cap(cDay, "3-DAY FORECAST");
   for (int i = 0; i < 3; ++i) {
     int y = 36 + i * 34;
@@ -166,10 +167,11 @@ lv_obj_t* build() {
 void update(const app::Snapshot& s) {
   const domain::Weather& w = s.weather;
   char b[48];
+  char v[16];  // one formatted number, composed into b below
 
   char dat[24] = "";
-  time_t now = time(nullptr);
-  if (now > 1700000000) {
+  if (app::timeIsSynced()) {
+    time_t now = time(nullptr);
     struct tm t;
     localtime_r(&now, &t);
     strftime(dat, sizeof(dat), "%a %d %b", &t);
@@ -189,18 +191,8 @@ void update(const app::Snapshot& s) {
     theme::setText(uvBand, "");
     theme::setText(uvMax, "");
     theme::setText(uvWin, "No data available");
-    for (int i = 0; i < 8; ++i) {
-      theme::setText(hc[i].label, "");
-      theme::setText(hc[i].t, "");
-      lv_obj_add_flag(hc[i].uv, LV_OBJ_FLAG_HIDDEN);
-    }
-    for (int i = 0; i < 3; ++i) {
-      theme::setText(dr[i].name, "");
-      theme::setText(dr[i].lo, "");
-      theme::setText(dr[i].hi, "");
-      theme::setText(dr[i].cond, "");
-      lv_obj_add_flag(dr[i].track, LV_OBJ_FLAG_HIDDEN);
-    }
+    for (int i = 0; i < 8; ++i) clearHour(i);
+    for (int i = 0; i < 3; ++i) clearDay(i);
     return;
   }
 
@@ -208,25 +200,30 @@ void update(const app::Snapshot& s) {
   snprintf(b, sizeof(b), "%.0f\xC2\xB0", w.tempC);
   theme::setText(temp, b);
   theme::setText(desc, w.desc[0] ? w.desc : "--");
-  snprintf(b, sizeof(b), "Feels %.0f\xC2\xB0", w.apparentC);
+  fmt::value(v, sizeof(v), w.apparentC, 0);
+  snprintf(b, sizeof(b), "Feels %s\xC2\xB0", v);
   theme::setText(feels, b);
 
   // AIR
-  snprintf(b, sizeof(b), "Humidity   %.0f%%", w.humidity);
+  fmt::value(v, sizeof(v), w.humidity, 0);
+  snprintf(b, sizeof(b), "Humidity   %s%%", v);
   theme::setText(hum, b);
-  snprintf(b, sizeof(b), "Wind   %.0f km/h", w.windKmh);
+  fmt::value(v, sizeof(v), w.windKmh, 0);
+  snprintf(b, sizeof(b), "Wind   %s km/h", v);
   theme::setText(wind, b);
-  snprintf(b, sizeof(b), "Precip   %.1f mm", w.precip);
+  fmt::value(v, sizeof(v), w.precip, 1);
+  snprintf(b, sizeof(b), "Precip   %s mm", v);
   theme::setText(precip, b);
   snprintf(b, sizeof(b), LV_SYMBOL_UP " %s   " LV_SYMBOL_DOWN " %s",
            w.sunrise[0] ? w.sunrise : "--", w.sunset[0] ? w.sunset : "--");
   theme::setText(sun, b);
 
   // UV
-  snprintf(b, sizeof(b), "%.0f", w.uvIndex);
+  fmt::value(b, sizeof(b), w.uvIndex, 0);
   theme::setText(uvNum, b);
   theme::setText(uvBand, domain::uvWord(w.uvIndex));
-  snprintf(b, sizeof(b), "Today max %.0f", w.uvMax);
+  fmt::value(v, sizeof(v), w.uvMax, 0);
+  snprintf(b, sizeof(b), "Today max %s", v);
   theme::setText(uvMax, b);
   snprintf(b, sizeof(b), "High UV: %s", w.uvWindow[0] ? w.uvWindow : "--");
   theme::setText(uvWin, b);
@@ -235,19 +232,18 @@ void update(const app::Snapshot& s) {
   for (int i = 0; i < 8; ++i) {
     if (i < w.nHours) {
       theme::setText(hc[i].label, w.hours[i].label);
-      snprintf(b, sizeof(b), "%.0f\xC2\xB0", w.hours[i].tempC);
+      fmt::value(v, sizeof(v), w.hours[i].tempC, 0);
+      snprintf(b, sizeof(b), "%s\xC2\xB0", v);
       theme::setText(hc[i].t, b);
       if (w.hours[i].uv > 0) {
         snprintf(b, sizeof(b), "UV%d", w.hours[i].uv);
-        badgeText(hc[i].uv, b);
+        theme::pillText(hc[i].uv, b);
         lv_obj_clear_flag(hc[i].uv, LV_OBJ_FLAG_HIDDEN);
       } else {
         lv_obj_add_flag(hc[i].uv, LV_OBJ_FLAG_HIDDEN);
       }
     } else {
-      theme::setText(hc[i].label, "");
-      theme::setText(hc[i].t, "");
-      lv_obj_add_flag(hc[i].uv, LV_OBJ_FLAG_HIDDEN);
+      clearHour(i);
     }
   }
 
@@ -282,11 +278,7 @@ void update(const app::Snapshot& s) {
       lv_obj_set_pos(dr[i].fill, x0, 0);
       lv_obj_clear_flag(dr[i].track, LV_OBJ_FLAG_HIDDEN);
     } else {
-      theme::setText(dr[i].name, "");
-      theme::setText(dr[i].lo, "");
-      theme::setText(dr[i].hi, "");
-      theme::setText(dr[i].cond, "");
-      lv_obj_add_flag(dr[i].track, LV_OBJ_FLAG_HIDDEN);
+      clearDay(i);
     }
   }
 }

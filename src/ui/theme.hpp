@@ -7,6 +7,22 @@
 namespace ui {
 namespace theme {
 
+// Panel geometry. These mirror EPD_WIDTH/EPD_HEIGHT of the LILYGO T5 4.7"
+// display, which the driver re-exports as adapters::EpdGuard::W/H. They are
+// repeated here rather than included because that header pulls in Arduino and
+// the e-paper driver, and theme.hpp is included by every page — so a page that
+// only wants to place a card would end up dragging in the display driver.
+// If the board ever changes, these two numbers and EpdGuard's must move
+// together.
+constexpr int kScreenW = 960;
+constexpr int kScreenH = 540;
+// Every page insets its cards by this much on the left and the right, so a
+// full-width element is the screen minus both margins.
+constexpr int kMargin = 8;
+constexpr int kContentW = kScreenW - 2 * kMargin;
+constexpr int kCenterX = kScreenW / 2;
+constexpr int kCenterY = kScreenH / 2;
+
 // Set label text ONLY when it actually changed. lv_label_set_text always
 // invalidates the object, so blindly re-setting every label each refresh
 // dirties the whole screen and forces a full e-paper redraw. Comparing first
@@ -52,20 +68,30 @@ inline lv_obj_t* card(lv_obj_t* parent, int x, int y, int w, int h,
 }
 
 // Inverted (solid black) pill with white caps text — the page title tab.
-inline lv_obj_t* pill(lv_obj_t* parent, const lv_font_t* font) {
+// The default geometry is the title-tab size; the smaller UV badges on the
+// weather page pass their own radius and padding.
+inline lv_obj_t* pill(lv_obj_t* parent, const lv_font_t* font, int radius = 8,
+                      int padHor = 14, int padVer = 5) {
   lv_obj_t* p = lv_obj_create(parent);
   lv_obj_set_size(p, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
   lv_obj_set_style_bg_color(p, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(p, LV_OPA_COVER, 0);
-  lv_obj_set_style_radius(p, 8, 0);
+  lv_obj_set_style_radius(p, radius, 0);
   lv_obj_set_style_border_width(p, 0, 0);
-  lv_obj_set_style_pad_hor(p, 14, 0);
-  lv_obj_set_style_pad_ver(p, 5, 0);
+  lv_obj_set_style_pad_hor(p, padHor, 0);
+  lv_obj_set_style_pad_ver(p, padVer, 0);
   lv_obj_clear_flag(p, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_t* t = label(p, font, lv_color_white());
   lv_obj_center(t);
   lv_obj_set_user_data(p, t);
   return p;
+}
+
+// The compact variant of the same widget: the per-hour UV chips on the weather
+// page. Same construction, tighter geometry — named so the call site says what
+// it is building rather than spelling out three unexplained numbers.
+inline lv_obj_t* badge(lv_obj_t* parent, const lv_font_t* font) {
+  return pill(parent, font, /*radius=*/6, /*padHor=*/7, /*padVer=*/2);
 }
 
 inline void pillText(lv_obj_t* p, const char* txt) {
@@ -84,8 +110,8 @@ inline lv_obj_t* header(lv_obj_t* parent, const lv_font_t* pillFont,
   lv_obj_align(p, LV_ALIGN_TOP_LEFT, 8, 8);
 
   lv_obj_t* rule = lv_obj_create(parent);
-  lv_obj_set_size(rule, 944, 3);
-  lv_obj_set_pos(rule, 8, 48);
+  lv_obj_set_size(rule, kContentW, 3);
+  lv_obj_set_pos(rule, kMargin, 48);
   lv_obj_set_style_bg_color(rule, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(rule, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(rule, 0, 0);

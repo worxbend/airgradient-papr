@@ -9,7 +9,9 @@
 #include "config.hpp"
 #include "domain/aqi.hpp"
 #include "domain/measurement.hpp"
+#include "domain/metrics.hpp"
 #include "ui/fonts/fonts.hpp"
+#include "ui/format.hpp"
 #include "ui/theme.hpp"
 #include "ui/ui.hpp"
 
@@ -19,7 +21,6 @@ namespace ui {
 namespace aq {
 namespace {
 
-constexpr int SCR_CX = 480, SCR_CY = 270;
 constexpr int NDOTS = 28;
 constexpr float DEG = 0.017453293f;
 
@@ -61,12 +62,15 @@ void centerLabels(int cx, int cy, int dia, const char* name, const char* unit,
                   lv_obj_t** valueOut) {
   lv_obj_t* nm = theme::label(scr, &font_status_22);
   theme::setText(nm, name);
-  lv_obj_align(nm, LV_ALIGN_CENTER, cx - SCR_CX, cy - SCR_CY - dia / 2 - 14);
+  lv_obj_align(nm, LV_ALIGN_CENTER, cx - theme::kCenterX,
+               cy - theme::kCenterY - dia / 2 - 14);
   lv_obj_t* u = theme::label(scr, &font_units_18);
   theme::setText(u, unit);
-  lv_obj_align(u, LV_ALIGN_CENTER, cx - SCR_CX, cy - SCR_CY - 24);
+  lv_obj_align(u, LV_ALIGN_CENTER, cx - theme::kCenterX,
+               cy - theme::kCenterY - 24);
   *valueOut = theme::label(scr, &font_num_64);
-  lv_obj_align(*valueOut, LV_ALIGN_CENTER, cx - SCR_CX, cy - SCR_CY + 12);
+  lv_obj_align(*valueOut, LV_ALIGN_CENTER, cx - theme::kCenterX,
+               cy - theme::kCenterY + 12);
 }
 
 void makeArc(int cx, int cy, int dia, const char* name, const char* unit,
@@ -75,7 +79,7 @@ void makeArc(int cx, int cy, int dia, const char* name, const char* unit,
   gCo2.max = mx;
   lv_obj_t* a = lv_arc_create(scr);
   lv_obj_set_size(a, dia, dia);
-  lv_obj_align(a, LV_ALIGN_CENTER, cx - SCR_CX, cy - SCR_CY);
+  lv_obj_align(a, LV_ALIGN_CENTER, cx - theme::kCenterX, cy - theme::kCenterY);
   lv_arc_set_bg_angles(a, 135, 45);  // 270° with gap at bottom
   lv_arc_set_range(a, mn, mx);
   lv_arc_set_value(a, mn);
@@ -97,8 +101,8 @@ void makeArc(int cx, int cy, int dia, const char* name, const char* unit,
 
   centerLabels(cx, cy, dia, name, unit, &gCo2.value);
   gCo2.status = theme::label(scr, &lv_font_montserrat_18);
-  lv_obj_align(gCo2.status, LV_ALIGN_CENTER, cx - SCR_CX,
-               cy - SCR_CY + dia / 2 - 30);
+  lv_obj_align(gCo2.status, LV_ALIGN_CENTER, cx - theme::kCenterX,
+               cy - theme::kCenterY + dia / 2 - 30);
 }
 
 void makeDots(int cx, int cy, int dia, const char* name, const char* unit,
@@ -127,8 +131,8 @@ void makeDots(int cx, int cy, int dia, const char* name, const char* unit,
 
   gPm.badge = lv_obj_create(scr);
   lv_obj_set_size(gPm.badge, 32, 32);
-  lv_obj_align(gPm.badge, LV_ALIGN_CENTER, cx - SCR_CX,
-               cy - SCR_CY + dia / 2 - 30);
+  lv_obj_align(gPm.badge, LV_ALIGN_CENTER, cx - theme::kCenterX,
+               cy - theme::kCenterY + dia / 2 - 30);
   lv_obj_set_style_radius(gPm.badge, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_bg_color(gPm.badge, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(gPm.badge, LV_OPA_COVER, 0);
@@ -156,22 +160,26 @@ Tile makeTile(int x, int y, int w, int h, const char* name, const char* unit) {
   return t;
 }
 
-void fmt1(char* b, size_t n, float v) {
-  if (isnan(v))
-    snprintf(b, n, "--");
-  else
-    snprintf(b, n, "%.1f", v);
+// The update verb for a tile: number on the left, status word underneath.
+void setTile(const Tile& t, float v, const char* status, int decimals) {
+  char b[24];
+  fmt::value(b, sizeof(b), v, decimals);
+  theme::setText(t.value, b);
+  theme::setText(t.status, status);
 }
-void fmt0(char* b, size_t n, float v) {
-  if (isnan(v))
-    snprintf(b, n, "--");
-  else
-    snprintf(b, n, "%.0f", v);
+
+// The word under a tile. domain/metrics.hpp already knows which breakpoints
+// each metric uses and which ones are worded as comfort rather than health, so
+// asking it keeps the panel and the host tests reading from the same table
+// instead of from two hand-copied lists that can drift apart.
+const char* statusWord(const Measurement& m, MetricId id) {
+  Band b = domain::band(m, id);
+  return domain::usesComfortWord(id) ? comfortWord(b) : bandWord(b);
 }
 
 void setArc(ArcGauge& g, float v, Band band) {
   char b[24];
-  fmt0(b, sizeof(b), v);
+  fmt::value(b, sizeof(b), v, 0);
   theme::setText(g.value, b);
   theme::setText(g.status, bandWord(band));
   if (!isnan(v)) {
@@ -187,7 +195,7 @@ void setArc(ArcGauge& g, float v, Band band) {
 
 void setDots(DotGauge& g, float v, Band band) {
   char b[24];
-  fmt1(b, sizeof(b), v);
+  fmt::value(b, sizeof(b), v, 1);
   theme::setText(g.value, b);
   // NoData ranks above Hazardous numerically — without its own case a missing
   // reading would show the warning triangle next to "--".
@@ -289,26 +297,16 @@ void update(const app::Snapshot& s) {
   setArc(gCo2, m.rco2, bandCo2(m.rco2));
   setDots(gPm, m.pm25(), bandPm25(m.pm25()));
 
-  fmt0(b, sizeof(b), m.tempC());
-  theme::setText(tTemp.value, b);
-  theme::setText(tTemp.status, comfortWord(bandTemp(m.tempC())));
-  fmt0(b, sizeof(b), m.humidity());
-  theme::setText(tHum.value, b);
-  theme::setText(tHum.status, comfortWord(bandRhum(m.humidity())));
-  fmt0(b, sizeof(b), m.tvocIndex);
-  theme::setText(tTvoc.value, b);
-  theme::setText(tTvoc.status, bandWord(bandTvoc(m.tvocIndex)));
-  fmt0(b, sizeof(b), m.noxIndex);
-  theme::setText(tNox.value, b);
-  theme::setText(tNox.status, bandWord(bandNox(m.noxIndex)));
+  setTile(tTemp, m.tempC(), statusWord(m, MetricId::TEMP), 0);
+  setTile(tHum, m.humidity(), statusWord(m, MetricId::RHUM), 0);
+  setTile(tTvoc, m.tvocIndex, statusWord(m, MetricId::TVOC), 0);
+  setTile(tNox, m.noxIndex, statusWord(m, MetricId::NOX), 0);
 
-  fmt1(b, sizeof(b), m.pm01);
-  theme::setText(tPm1.value, b);
-  theme::setText(tPm1.status, bandWord(bandPm25(m.pm01)));
-  fmt1(b, sizeof(b), m.pm10);
-  theme::setText(tPm10.value, b);
-  theme::setText(tPm10.status, bandWord(bandPm10(m.pm10)));
-  fmt0(b, sizeof(b), m.pm003Count);
+  setTile(tPm1, m.pm01, statusWord(m, MetricId::PM01), 1);
+  setTile(tPm10, m.pm10, statusWord(m, MetricId::PM10), 1);
+  // PM0.3 shows no status word on purpose: domain::band() bands it from a
+  // coarse count proxy that exists only so it can take part in hero ranking.
+  fmt::value(b, sizeof(b), m.pm003Count, 0);
   theme::setText(tPm003.value, b);
   theme::setText(tPm003.status, "");
 }

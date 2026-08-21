@@ -6,6 +6,7 @@
 #include <math.h>
 
 #include "ui/fonts/fonts.hpp"
+#include "ui/format.hpp"
 #include "ui/pages.hpp"
 #include "ui/theme.hpp"
 
@@ -26,7 +27,7 @@ struct Row {
 Row rUsd, rEur, rCny, rBtc, rEth;
 
 Row makeRow(int y, const char* code, const char* name) {
-  lv_obj_t* c = theme::card(scr, 8, y, 944, 50);
+  lv_obj_t* c = theme::card(scr, theme::kMargin, y, theme::kContentW, 50);
   lv_obj_set_style_pad_ver(c, 6, 0);
   lv_obj_t* codeL = theme::label(c, &font_status_22);
   theme::setText(codeL, code);
@@ -40,6 +41,15 @@ Row makeRow(int y, const char* code, const char* name) {
   return r;
 }
 
+// Show one rate. Every row needs the missing-value check that fmt::value does:
+// fetch() validates only usdUah, so any other rate can be NAN while c.valid is
+// still true, and "%f" would print a literal "nan" onto the panel.
+void setRate(const Row& r, float v, int decimals) {
+  char b[32];
+  fmt::value(b, sizeof(b), v, decimals);
+  theme::setText(r.value, b);
+}
+
 }  // namespace
 
 lv_obj_t* build() {
@@ -47,7 +57,7 @@ lv_obj_t* build() {
   theme::header(scr, &lv_font_montserrat_20, "CURRENCY", &hdrRight);
 
   // 30-day USD/UAH chart.
-  lv_obj_t* cCard = theme::card(scr, 8, 56, 944, 176);
+  lv_obj_t* cCard = theme::card(scr, theme::kMargin, 56, theme::kContentW, 176);
   lv_obj_t* cap = theme::label(cCard, &lv_font_montserrat_16);
   theme::setText(cap, "USD/UAH - 30 DAYS");
   lv_obj_align(cap, LV_ALIGN_TOP_LEFT, 0, 0);
@@ -84,36 +94,29 @@ lv_obj_t* build() {
 
 void update(const app::Snapshot& s) {
   const domain::Currency& c = s.currency;
-  char b[32];
 
   theme::setText(hdrRight, c.valid && c.date[0] ? c.date : "");
 
   if (!c.valid) {
-    theme::setText(rUsd.value, "--");
-    theme::setText(rEur.value, "--");
-    theme::setText(rCny.value, "--");
-    theme::setText(rBtc.value, "--");
-    theme::setText(rEth.value, "--");
+    setRate(rUsd, NAN, 2);
+    setRate(rEur, NAN, 2);
+    setRate(rCny, NAN, 3);
+    setRate(rBtc, NAN, 0);
+    setRate(rEth, NAN, 1);
     theme::setText(chartHi, "");
     theme::setText(chartLo, "");
     return;
   }
 
-  // Every row gets an isnan guard: fetch() only validates usdUah, so any other
-  // rate can be NAN with c.valid still true — %f would print a literal "nan".
-  snprintf(b, sizeof(b), "%.2f", c.usdUah);
-  theme::setText(rUsd.value, isnan(c.usdUah) ? "--" : b);
-  snprintf(b, sizeof(b), "%.2f", c.eurUah);
-  theme::setText(rEur.value, isnan(c.eurUah) ? "--" : b);
-  snprintf(b, sizeof(b), "%.3f", c.cnyUsd);
-  theme::setText(rCny.value, isnan(c.cnyUsd) ? "--" : b);
-  snprintf(b, sizeof(b), "%.0f", c.btcUsd);
-  theme::setText(rBtc.value, isnan(c.btcUsd) ? "--" : b);
-  snprintf(b, sizeof(b), "%.1f", c.ethUsd);
-  theme::setText(rEth.value, isnan(c.ethUsd) ? "--" : b);
+  setRate(rUsd, c.usdUah, 2);
+  setRate(rEur, c.eurUah, 2);
+  setRate(rCny, c.cnyUsd, 3);
+  setRate(rBtc, c.btcUsd, 0);
+  setRate(rEth, c.ethUsd, 1);
 
   // chart
   if (c.histCount >= 2) {
+    char b[32];
     float mn = c.hist[0], mx = c.hist[0];
     for (int i = 1; i < c.histCount; ++i) {
       if (c.hist[i] < mn) mn = c.hist[i];
