@@ -256,9 +256,12 @@ E-paper accumulates faint "ghosts" of prior images. Two defences:
   `kDeGhostRefreshSeconds` forces one hourly even when nothing changed.
 - `EpdGuard::repairRoutine(cycles)` alternates full black/white GC16 frames to
   shake loose stubborn stuck particles — a manual "deep clean". Trigger it with
-  **`curl http://airdeck.local/repair`**; the endpoint only raises a flag and the
-  UI task runs the routine, because it drives the panel directly and would
-  otherwise race a refresh in flight. It takes ~10 s (the UI task's watchdog is
+  **`curl http://airdeck.local/repair`**; the endpoint only raises a flag
+  and the UI task runs the routine, because it drives the panel directly and
+  would otherwise race a refresh in flight. The routine itself still asks the
+  temperature and heap gates for permission (only the rate limit is waived,
+  since a human asked for it), so it refuses rather than driving an unsafe
+  waveform. It takes ~10 s (the UI task's watchdog is
   fed per cycle) and allocates its solid-colour buffer only for the duration.
 
 ## The LVGL bridge (`epd_lvgl_port.cpp`)
@@ -267,7 +270,7 @@ LVGL renders into small **partial buffers** (960×54 px, L8 = 1 byte/px, ~1/10
 screen) allocated in PSRAM. Its `flushCb`:
 
 1. Converts each L8 (luminance) pixel into our packed 4 bpp framebuffer.
-2. Calls `guard->markDirty(...)` to grow the dirty rectangle.
+2. Calls `guard->markDirty(...)` to flag the framebuffer as changed (the coordinates are used only to ignore fully off-screen writes; there is no dirty rectangle, because partial updates are disabled).
 3. On the **last** flush of a refresh (`lv_display_flush_is_last`), calls
    `guard->present(false)` to push to the panel.
 4. Calls `lv_display_flush_ready(disp)`.

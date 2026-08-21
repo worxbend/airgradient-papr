@@ -15,18 +15,13 @@ common change. Files are grouped by layer (inner → outer).
 | `aqi.hpp` | US EPA AQI (PM2.5) + `Band` enum + per-metric band functions + `bandWord`/`comfortWord`. | Retune a health/comfort threshold. |
 | `metrics.hpp` | The metric catalog (`MetricInfo`: label, unit, trend epsilon, priority), `value()`, `band()`, and `heroMetric()` (worst metric now). | Add a metric to the catalog or change hero ranking. |
 | `weather.hpp` | Plain-data weather/forecast/UV model. | Add a weather field. |
+| `weather_fmt.hpp` | Weather page string helpers: `dowIndex`/`dowName` (day-of-week), `hourLabel` ("3PM"), `containsCI` + `shortCond` (wttr.in's free text → one short word). Pure so the buffer and off-by-one edges are host-testable. | Change how a forecast column is worded. |
 | `currency.hpp` | Plain-data rates + `hist[kHistMax]` history array. | Change how much history is kept. |
 | `trend.hpp` | `History<N>` ring buffer (min/max/at/latest) + `Trend`/Δ logic. Templated, no heap. | Change sparkline/trend behavior. |
 
 > **Everything here is covered by `test/test_domain/test_domain.cpp`.** If you
 > touch a threshold or the hero rule, add/adjust a test and run
 > `pio test -e native-test`.
-
-## `ports/` — interfaces
-
-| File | Owns |
-|---|---|
-| `metrics_source.hpp` | The `MetricsSource` interface: `poll(Measurement&)` + `lastError()`. The AirGradient adapter implements it; a fake could too. |
 
 ## `adapters/` — the outside world
 
@@ -58,7 +53,8 @@ common change. Files are grouped by layer (inner → outer).
 | `dashboard.cpp` | Page 1 (air): CO₂ **arc gauge** (with knob), PM2.5 **dot ring** (28 dots + badge), 2×2 tiles, PM detail row, big clock. Gauges only move when the integer value changes. | The "hero" page. |
 | `pages/weather.cpp` | Page 2: current conditions + AIR + UV block + 8-slot hourly strip + 3-day forecast with range bars. | |
 | `pages/currency.cpp` | Page 3: 30-day USD/UAH `lv_chart` + rate rows. | |
-| `theme.hpp` | Shared widget factories (`screen`, `label`, `card`, `pill`) + the crucial **`setText()`** that only invalidates on real change. | Strict black/white styling. |
+| `format.hpp` | `fmt::value()` — the one place a reading becomes text, printing `--` for NaN so a missing field never reaches the panel as the literal "nan". | LVGL-free; every page includes it. |
+| `theme.hpp` | Panel geometry constants (`kScreenW/H`, `kMargin`, `kContentW`, `kCenterX/Y`) + shared widget factories (`screen`, `label`, `card`, `pill`/`pillText`) + the crucial **`setText()`** that only invalidates on real change. | Strict black/white styling. |
 | `fonts/` | Committed LVGL C fonts: big numerals (`font_num_*`), status (`font_status_*`), unit glyphs (`font_units_18`, gives `µg/m³`/`°C`). Regenerate with `tools/fontgen.sh`. | Range-limited — mind glyph coverage (ch. 06). |
 
 ## The two front doors

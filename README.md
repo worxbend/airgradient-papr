@@ -174,6 +174,8 @@ pio device monitor
 pio run -e t5-epd47-v1 -t upload --upload-port airdeck.local   # no USB needed
 ```
 
+OTA is unauthenticated: anything that can reach the board on your network segment can flash it. Keep the board on a network you trust.
+
 ### Build environments
 
 | env | target |
@@ -195,7 +197,6 @@ Everything lives in `include/config.hpp` (copied from [`include/config.example.h
 |---|---|---|
 | `kWifiSsid` / `kWifiPass` | — | your Wi-Fi credentials. **2.4 GHz only** — the ESP32 has no 5 GHz radio |
 | `kMonitorUrl` | `http://192.168.1.21/measures/current` | full URL to the AirGradient's local API — use a DHCP reservation |
-| `kMonitorSerial` | `""` | optional monitor serial for the mDNS fallback (`airgradient_{SERIAL}.local`); empty = URL only |
 | `kLatitude` / `kLongitude` | `0.0` | weather location; `0/0` = auto-detect via IP geolocation |
 | `kWeatherPollSeconds` | `600` | weather/UV poll cadence (10 min) |
 | `kCurrencyPollSeconds` | `1800` | FX/crypto poll cadence (30 min) |
@@ -220,12 +221,10 @@ One full e-paper refresh blocks the UI for ~1 s and peaks at ~950 mW, so airdeck
 | `kNetStallRebootSeconds` | `600` | reboot if the network task stops making progress |
 | `kRefreshStarveRebootSeconds` | `600` | reboot if heap fragmentation starves the panel refresh gate this long — otherwise a permanently closed gate means a silently frozen screen with Wi-Fi still up |
 
-### Behaviour & clock
+### Clock
 
 | Constant | Default | What it does |
 |---|---|---|
-| `kNightStartHour` / `kNightEndHour` | `23` / `7` | night window (start inclusive, end exclusive) |
-| `kFahrenheit` | `false` | temperature unit |
 | `kGmtOffsetSec` / `kDstOffsetSec` | `0` / `0` | timezone offset from UTC in seconds for the on-screen clock (e.g. UTC+3 = `10800`) |
 
 ### Battery profile (`t5-epd47-v1-batt` only)
@@ -331,7 +330,7 @@ A slick, angled desk-stand case. **FreeCAD source + print-ready `.3mf`** are com
 
 - 🟢 **[AirGradient](https://www.airgradient.com/)** — the open sensor that started it all
 - 🖼️ **[LVGL](https://lvgl.io/)** · **[LilyGo-EPD47](https://github.com/Xinyuan-LilyGO/LilyGo-EPD47)** / **[epdiy](https://github.com/vroland/epdiy)** — pixels on paper
-- 🌦️ **[wttr.in](https://github.com/chubin/wttr.in)** · **[Open-Meteo](https://open-meteo.com/)** · 🏦 **[NBU](https://bank.gov.ua/)** · 🪙 **[CoinGecko](https://www.coingecko.com/)** — the data
+- 🌦️ **[wttr.in](https://github.com/chubin/wttr.in)** · 🏦 **[NBU](https://bank.gov.ua/)** · 🪙 **[CoinGecko](https://www.coingecko.com/)** — the data
 - 🛠️ More builds at **[github.com/worxbend](https://github.com/worxbend)**
 
 **License:** [MIT](LICENSE) — do whatever makes your air more visible.

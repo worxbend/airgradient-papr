@@ -11,7 +11,10 @@ display driver) and because we want to test the *logic* — "is 900 ppm CO₂
 unhealthy?" — on a laptop in milliseconds, not by re-flashing a board. So we
 draw a hard line between **pure decision-making** and **messy I/O**. That line
 is the whole design. It's a lightweight take on **hexagonal architecture** (a.k.a.
-"ports and adapters").
+"ports and adapters") — lightweight in the literal sense that we keep the shape
+and skip the ceremony: the layering and the inward-only dependency rule are
+enforced, but an interface only exists where something actually varies. Right now
+nothing does, so there is no `ports/` folder (see below).
 
 ## The layers, from the inside out
 
@@ -25,9 +28,6 @@ is the whole design. It's a lightweight take on **hexagonal architecture** (a.k.
         ├───────────────────────────────────────────────────────┤
         │                       adapters/                        │  the real world
         │  wifi_link · *_http · epd_guard · epd_lvgl_port · net  │
-        ├───────────────────────────────────────────────────────┤
-        │                        ports/                          │  interfaces
-        │                    metrics_source                      │
         ├───────────────────────────────────────────────────────┤
         │                       domain/  ◀── PURE, TESTED        │  the rules
         │   measurement · aqi · metrics · weather · currency ·   │
@@ -50,6 +50,11 @@ run on your laptop under the `native-test` environment.
 - **`metrics.hpp`** — a catalog that ties each metric to its label, unit,
   band function, and priority. Also `heroMetric()` (the worst metric right now).
 - **`weather.hpp` / `currency.hpp`** — plain-data models for those pages.
+- **`weather_fmt.hpp`** — the string work behind the weather page: day-of-week
+  names, `"3PM"`-style hour labels, and the one-word condition ("RAIN") boiled
+  down from wttr.in's free-text description. It lives here, not next to the HTTP
+  adapter, so the host tests can reach it — every one of those functions has a
+  buffer-size or off-by-one edge worth pinning.
 - **`trend.hpp`** — a fixed-capacity ring buffer (`History<N>`) plus trend/Δ
   logic for sparklines. Templated so there's no heap allocation.
 
@@ -57,11 +62,13 @@ run on your laptop under the `native-test` environment.
 > with `pio test -e native-test` in ~0.2 s. If you change a threshold, a failing
 > test tells you instantly — no board required.
 
-### `ports/` — the interface (a contract)
-
-- **`metrics_source.hpp`** declares *what* the app needs ("something with a
-  `poll(Measurement&)`"), not *how*. The AirGradient HTTP adapter implements it.
-  This is the seam where a mock or a different sensor could slot in.
+> **What happened to `ports/`?** There used to be a `MetricsSource` abstract
+> class here that `AirGradientHttp` inherited from. Nothing ever held a
+> `MetricsSource&` — both build profiles construct the concrete adapter and call
+> `poll()` on it directly — so it cost a vtable and two virtual calls per poll
+> and bought no substitutability. The real seam is one layer out and is
+> described under "Why this shape pays off" below: you point the adapter at a
+> different HTTP URL. It was removed; see `docs/DECISIONS.md`.
 
 ### `adapters/` — the messy outside world
 

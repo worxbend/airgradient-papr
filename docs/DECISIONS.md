@@ -328,7 +328,7 @@ contiguous block is exactly what makes the panel driver's per-frame
   for the whole uptime**. Removed rather than left as a trap; git history has it.
   `partial_refreshes` is gone from `/health`.
 - **`repairRoutine()` was unreachable too** — the handbook prescribed it for
-  stubborn ghosting but nothing called it. Now exposed as **`GET /repair`**. The
+  stubborn ghosting but nothing called it. Now exposed as **`/repair`**. The
   endpoint runs on the net task and only raises a flag; the UI task runs the
   routine, because it drives the panel directly and would otherwise race a
   refresh in flight. It allocates its solid-colour buffer for the ~10 s it runs
@@ -346,6 +346,77 @@ contiguous block is exactly what makes the panel driver's per-frame
   partial updates disabled, means a whole-panel GC16 redraw at the next allowed
   slot. Rounding costs nothing legible and stops the radio's noise floor from
   driving the refresh budget.
+
+## The `MetricsSource` port removed as unused
+
+`ports/metrics_source.hpp` declared an abstract class with `poll(Measurement&)`
+and `lastError()`, and `AirGradientHttp` inherited from it. Nothing ever held a
+`ports::MetricsSource&`: every device profile builds the same `main.cpp`, and
+both of its entry paths construct the concrete `adapters::AirGradientHttp` and
+call its methods directly. The base class therefore added a vtable pointer to the
+adapter and two indirect calls per poll while buying no substitutability at all.
+`WeatherHttp` and `CurrencyHttp` never had a port and nobody has missed one.
+
+Swapping the metrics source is done a layer further out, by pointing
+`cfg::kMonitorUrl` somewhere else — which is exactly how `tools/mock_airgradient.py`
+already stands in for real hardware, and how the weather and currency adapters
+have always been redirected. That seam is the one people actually use, it needs
+no inheritance, and it works without a rebuild of the abstraction.
+
+The header is deleted; the method signatures on `AirGradientHttp` are unchanged,
+so no caller moved. Handbook ch. 01 no longer advertises the removed layer.
+
+## Weather formatting moved into `domain/`
+
+`weather_http.cpp` held four pure helpers — Sakamoto day-of-week, the weekday
+name table, the `"3PM"` hour label and the wttr.in description → one-word
+condition mapping. Because that translation unit includes `<HTTPClient.h>`, the
+host `native-test` environment (`build_src_filter = -<*>`) could not compile it,
+so none of the four was covered by a test.
+
+They now live in `domain/weather_fmt.hpp` (header-only, pure) and are exercised
+by `test/test_domain/test_domain.cpp`. Two things changed in the move:
+
+- **The day-of-week table can no longer be read out of bounds.** The old code ran
+  `sscanf(date, "%d-%d-%d", &y, &mo, &dd)` on a string from a public server and
+  guarded only on `if (y)`. A body that matched just the year left `mo` at 0,
+  and `dow()` then read `t[mo - 1]` — `t[-1]` — from a 12-element table. The
+  parse now requires all three fields **and** sane ranges before the date is
+  used, and `dowIndex()` itself returns -1 for an out-of-range month. An
+  unparseable date simply leaves the day name empty.
+- **`strlcpy` → `snprintf("%s")`** in `shortCond()`, and the case-insensitive
+  substring search is spelled out by hand instead of calling `strncasecmp`.
+  Both are BSD/POSIX extensions that host glibc and newlib do not agree on, and
+  this header has to compile under both toolchains.
+
+`geolocate()` also picked up three things `airgradient_http` already had: a
+`WiFi.status()` precheck (so a call with the link down fails immediately instead
+of burning the 4 s connect timeout inside the net task), `http.setReuse(false)`,
+and — the one that matters — `JsonDocument doc(&psramJson())`. It was the last
+default-allocator `JsonDocument` in the tree, i.e. the last parse still landing
+in internal DRAM on a network path.
+
+## The NVS "clean shutdown" flag now actually gets set
+
+`EpdGuard` keeps a flag in NVS (the ESP32's key-value store in flash) recording
+whether the last power-down was orderly. On boot, `init()` reads it: if the last
+shutdown was *not* clean the guard assumes the panel may hold a half-written
+image and pays an extra full-screen white settle frame to be sure.
+
+`markCleanShutdown()` is the method that sets the flag to true — and it had **no
+callers anywhere in the tree**. The flag was written `false` at every init and
+never written back, so every boot after the very first took the crash-recovery
+branch and paid the extra frame, whether or not anything had crashed. The flag
+did not mean what its name and comment said.
+
+It is now called on the two paths where the firmware deliberately reboots itself
+(the refresh-starvation and net-stall backstops in `loop()`), immediately before
+`esp_restart()`. A panic, a watchdog reset or a yanked cable still leaves the
+flag `false`, which is exactly the case the extra settle frame exists for.
+
+This is a **behaviour change, not a refactor**: the boot after a deliberate
+reboot now skips a settle frame it used to draw. It is listed separately here
+because everything else in this pass was behaviour-preserving.
 
 ## Non-issues, checked and dismissed
 

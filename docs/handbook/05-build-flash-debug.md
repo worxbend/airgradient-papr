@@ -127,8 +127,10 @@ What to watch:
   task reboots the board at `kNetStallRebootSeconds`.
 - **`consecutive_fail`** / **`last_poll_ago_s`** — sensor/Wi-Fi reachability.
 
-There is also **`GET /repair`**, which queues the de-ghost routine (alternating
-black/white GC16 frames, ~10 s) for the UI task:
+There is also **`/repair`**, which queues the de-ghost routine (alternating
+black/white GC16 frames, ~10 s) for the UI task. The handler only raises a flag;
+the UI task then runs the routine through the same temperature and heap gates as
+an ordinary refresh, and logs the reason if one of them refuses:
 
 ```bash
 curl http://airdeck.local/repair
@@ -142,6 +144,10 @@ flash you can push updates over Wi-Fi:
 ```bash
 pio run -e t5-epd47-v1 -t upload --upload-port airdeck.local
 ```
+
+**No password.** OTA is unauthenticated: anything that can reach the board on
+your network segment can flash it with firmware of its own. Keep the board on a
+network you trust, or on its own VLAN.
 
 ### Serial logs
 

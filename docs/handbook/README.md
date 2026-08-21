@@ -14,7 +14,7 @@ Read it in order the first time. Each chapter builds on the last.
 | # | Chapter | What you'll learn |
 |---|---------|-------------------|
 | [00](00-introduction.md) | **Introduction & mental model** | What airdeck *is*, the 60-second tour, and a glossary so no jargon trips you up. |
-| [01](01-architecture.md) | **Architecture** | The four layers (domain / ports / adapters / app+ui), why the code is split this way, and how one air reading travels from the sensor to the glass. |
+| [01](01-architecture.md) | **Architecture** | The layers (domain / adapters / app+ui), why the code is split this way, and how one air reading travels from the sensor to the glass. |
 | [02](02-power-model.md) | **Power model** | USB always-on vs. battery deep-sleep, why we wake every 15 minutes, how we skip refreshes, and the brownout safety gate. |
 | [03](03-epaper-deep-dive.md) | **E-paper deep dive** | How the panel physically works, the 4-bits-per-pixel framebuffer, the `EpdGuard` choke point, ghosting, and the infamous "white screen of death". |
 | [04](04-module-reference.md) | **Module reference** | A file-by-file tour of `src/`, what each piece owns, and where to make common changes. |

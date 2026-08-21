@@ -53,18 +53,17 @@ Key numbers you'll see everywhere:
 
 ## The 60-second code tour
 
-Everything lives under `src/`, split into five folders. Read them as a sentence:
+Everything lives under `src/`, split into four folders. Read them as a sentence:
 
-> The **domain** knows the rules of air quality. The **ports** describe what the
-> domain needs from the outside world. The **adapters** actually fetch data and
+> The **domain** knows the rules of air quality. The **adapters** actually fetch data and
 > push pixels. The **app** wires it together and manages power. The **ui** turns
 > data into a picture.
 
 ```
 src/
 ├── domain/     ← pure logic. No Wi-Fi, no display. Unit-tested on your laptop.
-│                 (aqi, metrics, measurement, weather, currency, trend)
-├── ports/      ← interfaces: "a metrics source must have a poll() method".
+│                 (aqi, metrics, measurement, weather, weather_fmt, currency,
+│                  trend)
 ├── adapters/   ← the real world: wifi_link, *_http fetchers, epd_guard, lvgl port.
 ├── app/        ← glue + policy: snapshot, buttons, power, health, clock.
 └── ui/         ← LVGL screens: dashboard (page 1), weather, currency, fonts, theme.
