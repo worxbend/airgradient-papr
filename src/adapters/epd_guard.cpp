@@ -74,19 +74,8 @@ void EpdGuard::markDirty(int x, int y, int w, int h) {
   if (y < 0) y = 0;
   if (x1 > W) x1 = W;
   if (y1 > H) y1 = H;
-  if (x1 <= x || y1 <= y) return;
-  if (!dirty_) {
-    dx0_ = x;
-    dy0_ = y;
-    dx1_ = x1;
-    dy1_ = y1;
-    dirty_ = true;
-  } else {
-    if (x < dx0_) dx0_ = x;
-    if (y < dy0_) dy0_ = y;
-    if (x1 > dx1_) dx1_ = x1;
-    if (y1 > dy1_) dy1_ = y1;
-  }
+  if (x1 <= x || y1 <= y) return;  // entirely off screen — nothing to push
+  dirty_ = true;
 }
 
 bool EpdGuard::rateLimitAllows() const {
@@ -94,13 +83,6 @@ bool EpdGuard::rateLimitAllows() const {
   const uint32_t need = pendingForce_ ? forcedMinIntervalMs_ : minIntervalMs_;
   // Unsigned subtraction — correct across the 49.7-day millis() wrap.
   return (uint32_t)(millis() - lastPresentMs_) >= need;
-}
-
-uint32_t EpdGuard::msUntilAllowed() const {
-  if (!havePresented_) return 0;
-  const uint32_t need = pendingForce_ ? forcedMinIntervalMs_ : minIntervalMs_;
-  const uint32_t since = (uint32_t)(millis() - lastPresentMs_);
-  return since >= need ? 0 : need - since;
 }
 
 void EpdGuard::setAmbientTempC(float c) {
@@ -128,27 +110,23 @@ bool EpdGuard::tempClampBlocks() {
   return blocks;
 }
 
-void EpdGuard::present(bool forceFull) {
-  if (forceFull) pendingForce_ = true;
-  if (!dirty_ && !pendingForce_) {
-    heapBlocked_ = false;  // nothing pending — the screen is current
-    return;
-  }
-
+// Every path that energises the rails asks here first. See the header for what
+// a false answer obliges the caller to do.
+bool EpdGuard::gatesAllowPanelWrite(bool enforceRateLimit) {
   // Rate limit (the once-per-minute rule). The framebuffer already holds the
   // newest image and `dirty_` stays set, so tick() re-enters here and pushes
   // the *latest* content the moment the interval expires — deferring costs
   // freshness, never content.
-  if (!rateLimitAllows()) {
+  if (enforceRateLimit && !rateLimitAllows()) {
     deferredRate_++;
-    return;
+    return false;
   }
 
   // Temperature clamp: refuse refreshes outside the panel's safe
   // range; keep the last image (costs nothing) and retry when back in range.
   if (tempClampBlocks()) {
     deferredTemp_++;
-    return;
+    return false;
   }
 
   // Heap gate: epd_draw_* spawns 8 KB worker tasks per frame; if internal heap
@@ -169,7 +147,7 @@ void EpdGuard::present(bool forceFull) {
           (unsigned)ESP.getFreeHeap(), (unsigned long)largestInternalBlock());
     }
     deferredHeap_++;
-    return;
+    return false;
   }
   if (heapBlocked_) {
     heapBlocked_ = false;
@@ -177,6 +155,18 @@ void EpdGuard::present(bool forceFull) {
         "[epd] heap recovered after %lus — refreshing again\n",
         (unsigned long)((uint32_t)(millis() - heapBlockedSinceMs_) / 1000));
   }
+
+  return true;
+}
+
+void EpdGuard::present(bool forceFull) {
+  if (forceFull) pendingForce_ = true;
+  if (!dirty_ && !pendingForce_) {
+    heapBlocked_ = false;  // nothing pending — the screen is current
+    return;
+  }
+
+  if (!gatesAllowPanelWrite(/*enforceRateLimit=*/true)) return;
 
   // Full refresh for every update (partial updates are disabled by request):
   // cleaner on this panel and avoids partial-refresh artifacts.
@@ -203,25 +193,33 @@ void EpdGuard::fullRefresh() {
   fullRefreshes_++;
 }
 
-void EpdGuard::clearWhite() {
-  memset(fb_, 0xFF, kFbBytes);
-  g_panelBusy = true;
-  epd_poweron();
-  fullRefresh();
-  epd_poweroff();
-  g_panelBusy = false;
-  lastPresentMs_ = millis();
-  havePresented_ = true;
-}
-
 bool EpdGuard::repairRoutine(int cycles) {
   // Alternate full black/white GC16 frames to shift stuck particles.
   //
+  // Ask the hardware gates before allocating anything. A repair drives ~16 more
+  // waveform batches than an ordinary refresh, so it is the last thing that
+  // should skip them: on a fragmented heap the driver's per-frame worker stacks
+  // cannot be created and a de-ghost walks straight into the xTaskCreate
+  // deadlock, and at -10 C it drives a waveform the panel is not rated for. The
+  // rate limit alone is skipped — a human asked for this one, it is not a
+  // data-driven redraw.
+  if (!gatesAllowPanelWrite(/*enforceRateLimit=*/false)) {
+    Serial.println(
+        "[epd] repair refused: panel too cold, or internal heap too low for "
+        "the driver's per-frame worker stacks — try again once /health shows "
+        "the panel warm and largest_free_block recovered");
+    return false;
+  }
+
   // The solid-colour source buffer is allocated here and released immediately:
   // it is a quarter-megabyte that used to sit in PSRAM for the whole uptime for
-  // the sake of a routine that runs seconds per year.
+  // the sake of a routine that runs seconds per year. Note this is PSRAM and so
+  // says nothing about the internal DRAM the gates above just checked.
   uint8_t* solid = (uint8_t*)heap_caps_malloc(kFbBytes, MALLOC_CAP_SPIRAM);
-  if (!solid) return false;
+  if (!solid) {
+    Serial.println("[epd] repair refused: PSRAM scratch buffer would not fit");
+    return false;
+  }
 
   g_panelBusy = true;
   epd_poweron();

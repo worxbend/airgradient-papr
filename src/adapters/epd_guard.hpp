@@ -97,13 +97,18 @@ class EpdGuard {
   // explicit user actions requested via requestForce(). Call once at boot.
   void setRefreshLimits(uint32_t minMs, uint32_t forcedMinMs);
 
-  // Accumulate a dirty rectangle (device pixel coords) from the flush_cb.
+  // Note that the framebuffer no longer matches what the panel shows, so the
+  // next allowed push has something to do. The rectangle arguments come from
+  // the flush_cb and are used only to ignore writes that fall entirely off
+  // screen: the guard tracks *whether* the framebuffer differs from the panel,
+  // not where. Partial updates are disabled on this panel (see fullRefresh()),
+  // so every push is a full-screen one and a smaller region would buy nothing.
   void markDirty(int x, int y, int w, int h);
 
-  // Push the accumulated dirty region to the panel — subject to the rate limit,
-  // the temperature clamp and the heap gates. If any gate blocks the push the
-  // region stays dirty and tick() retries it later; nothing is ever lost, it is
-  // only delayed. forceFull additionally sets the pending-force flag.
+  // Push the framebuffer to the panel — subject to the rate limit, the
+  // temperature clamp and the heap gates. If any gate blocks the push the
+  // framebuffer stays dirty and tick() retries it later; nothing is ever lost,
+  // it is only delayed. forceFull additionally sets the pending-force flag.
   void present(bool forceFull = false);
 
   // Mark the next push as user-initiated: it uses the short forced interval
@@ -114,17 +119,16 @@ class EpdGuard {
   // Call every loop iteration. Retries a push that an earlier gate deferred.
   void tick() { present(false); }
 
-  // Milliseconds until the rate limiter would allow the next push (0 = now).
-  uint32_t msUntilAllowed() const;
-
   void setAmbientTempC(float c);
 
   // Alternating black/white GC16 frames to shift stuck particles. Blocking
   // (~2.5 s per cycle) and MUST be called from the UI task — it drives the
   // panel directly, so calling it from the net task would race a refresh in
-  // flight. Returns false if its scratch buffer could not be allocated.
+  // flight. Returns false without touching the panel if the scratch buffer
+  // could not be allocated, or if the temperature or heap gate refuses the
+  // write. The rate limit does not apply: a repair is an explicit human
+  // request, not a data-driven redraw.
   bool repairRoutine(int cycles = 4);
-  void clearWhite();         // full white GC16 frame
   void powerOffForSleep();   // epd_poweroff_all before sleep
   void markCleanShutdown();  // set NVS clean flag
 
@@ -146,13 +150,24 @@ class EpdGuard {
   uint32_t maxRefreshMs() const { return maxRefreshDurMs_; }
 
  private:
+  // The one place the three gates live: the refresh rate limit, the panel
+  // temperature clamp and the internal-heap gate, checked in that order, each
+  // bumping its own deferral counter (the ones /health reports) when it says
+  // no. Returning false means the caller MUST NOT energise the high-voltage
+  // rails — no epd_poweron(), no waveform — and must leave the framebuffer
+  // dirty so a later tick() retries.
+  //
+  // enforceRateLimit=false skips only the rate limit, for a write a human
+  // explicitly asked for (the de-ghost routine). The temperature clamp and the
+  // heap gate protect the hardware and always apply.
+  bool gatesAllowPanelWrite(bool enforceRateLimit);
+
   bool rateLimitAllows() const;
   bool tempClampBlocks();
   void fullRefresh();
 
   uint8_t* fb_ = nullptr;  // full screen, W/2 * H bytes
   bool dirty_ = false;
-  int dx0_ = 0, dy0_ = 0, dx1_ = 0, dy1_ = 0;  // union rect [x0,x1)
   float tempC_ = NAN;
   uint32_t tempSetMs_ = 0;
   bool tempBlocking_ =
