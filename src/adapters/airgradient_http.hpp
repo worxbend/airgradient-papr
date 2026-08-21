@@ -5,18 +5,19 @@
 #include <Arduino.h>
 
 #include "domain/measurement.hpp"
-#include "ports/metrics_source.hpp"
 
 namespace adapters {
 
-class AirGradientHttp : public ports::MetricsSource {
+class AirGradientHttp {
  public:
   // `url` is the full endpoint, e.g. http://192.168.1.21/measures/current
   explicit AirGradientHttp(const char* url, uint32_t timeoutMs = 4000)
       : url_(url), timeoutMs_(timeoutMs) {}
 
-  bool poll(domain::Measurement& out) override;
-  const char* lastError() const override { return err_; }
+  // Poll once. On success, fills `out` and returns true. On failure returns
+  // false and leaves a human-readable reason in lastError().
+  bool poll(domain::Measurement& out);
+  const char* lastError() const { return err_; }
 
  private:
   const char* url_;
