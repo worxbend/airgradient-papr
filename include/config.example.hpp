@@ -20,11 +20,7 @@ constexpr char kWifiPass[] = "YOUR_WIFI_PASSWORD";
 // Full URL to the "current measures" endpoint.
 constexpr char kMonitorUrl[] = "http://192.168.1.21/measures/current";
 
-// Optional: the monitor serial, for the mDNS fallback name
-// airgradient_{SERIAL}.local. Leave empty to use kMonitorUrl only.
-constexpr char kMonitorSerial[] = "";
-
-// ---- Outdoor weather + UV (Open-Meteo, no API key) -------------------------
+// ---- Outdoor weather + UV (wttr.in, no API key) ----------------------------
 // Location: leave both at 0 to auto-detect via IP geolocation (ip-api.com).
 // Set explicit coordinates to override.
 constexpr double kLatitude = 0.0;
@@ -72,10 +68,7 @@ constexpr uint32_t kNetStallRebootSeconds = 600;
 constexpr uint32_t kRefreshStarveRebootSeconds = 600;
 
 // ---- Behaviour -------------------------------------------------------------
-constexpr uint32_t kPollSeconds = 30;    // 15..300
-constexpr uint8_t kNightStartHour = 23;  // inclusive
-constexpr uint8_t kNightEndHour = 7;     // exclusive
-constexpr bool kFahrenheit = false;
+constexpr uint32_t kPollSeconds = 30;  // 15..300
 
 // ---- Battery profile (-DPROFILE_BATTERY only) ------------------------------
 // Wall power ignores all of these. On battery the board is a single-shot
