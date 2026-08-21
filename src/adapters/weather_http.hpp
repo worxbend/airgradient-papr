@@ -1,7 +1,10 @@
 // src/adapters/weather_http.hpp
 // Outdoor weather + UV via free, key-less public APIs:
-//   - ip-api.com  (HTTP)  : IP geolocation -> lat/lon/city
-//   - open-meteo  (HTTPS) : current weather + UV + daily
+//   - ip-api.com (HTTP) : IP geolocation -> lat/lon/city + UTC offset
+//   - wttr.in    (HTTP) : ?format=j1 — current conditions, 3-day forecast,
+//                         3-hourly slots and UV index, all in one response
+// Both are plain HTTP on purpose: TLS is unreliable on this radio (see
+// handbook ch. 06).
 #pragma once
 #include <Arduino.h>
 

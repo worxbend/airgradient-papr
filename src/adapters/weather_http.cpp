@@ -5,11 +5,13 @@
 
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
+#include <WiFi.h>
 #include <WiFiClient.h>
 #include <time.h>
 
 #include "adapters/psram_http.hpp"
 #include "app/clock.hpp"
+#include "domain/weather_fmt.hpp"
 
 namespace adapters {
 
@@ -17,64 +19,27 @@ namespace {
 float atofOr(const char* s) {
   return (s && s[0]) ? (float)atof(s) : NAN;
 }
-
-// Day-of-week (0=Sun) via Sakamoto's algorithm.
-int dow(int y, int m, int d) {
-  static const int t[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
-  if (m < 3) y -= 1;
-  return (y + y / 4 - y / 100 + y / 400 + t[m - 1] + d) % 7;
-}
-const char* dowName(int i) {
-  static const char* n[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
-  return n[i % 7];
-}
-
-// 24h hour -> "12AM".."9PM" (slots are multiples of 3).
-void hourLabel(int h, char* out, size_t n) {
-  int h12 = h % 12;
-  if (h12 == 0) h12 = 12;
-  snprintf(out, n, "%d%s", h12, h < 12 ? "AM" : "PM");
-}
-
-// Case-insensitive substring test (strcasestr isn't portable to newlib).
-bool containsCI(const char* hay, const char* needle) {
-  if (!hay) return false;
-  size_t nl = strlen(needle);
-  for (const char* p = hay; *p; ++p)
-    if (strncasecmp(p, needle, nl) == 0) return true;
-  return false;
-}
-
-// wttr description -> short uppercase condition word.
-void shortCond(const char* d, char* out, size_t n) {
-  auto has = [&](const char* k) { return containsCI(d, k); };
-  const char* w = "CLOUDY";
-  if (!d || !d[0])
-    w = "--";
-  else if (has("thunder") || has("storm"))
-    w = "STORM";
-  else if (has("snow") || has("sleet") || has("blizzard"))
-    w = "SNOW";
-  else if (has("rain") || has("drizzle") || has("shower"))
-    w = "RAIN";
-  else if (has("fog") || has("mist"))
-    w = "FOG";
-  else if (has("sunny") || has("clear"))
-    w = "CLEAR";
-  else if (has("overcast"))
-    w = "OVERCAST";
-  else if (has("partly") || has("cloud"))
-    w = "CLOUDY";
-  strlcpy(out, w, n);
-}
 }  // namespace
 
 bool WeatherHttp::geolocate(double& lat, double& lon, char* city,
                             size_t cityLen, long& utcOffsetSec) {
+  // Fail fast when the radio is down. The caller retries this on every weather
+  // cycle until a fix sticks, and without the check each of those attempts sits
+  // in the net task for the full 4 s connect timeout before returning the same
+  // answer, delaying the AirGradient poll queued behind it. Same guard as
+  // airgradient_http::poll().
+  if (WiFi.status() != WL_CONNECTED) {
+    strlcpy(err_, "wifi down", sizeof(err_));
+    return false;
+  }
+
   WiFiClient client;
   HTTPClient http;
   http.setConnectTimeout(4000);
   http.setTimeout(4000);
+  // No keep-alive: this endpoint is hit at most once per boot, so a pooled
+  // socket would only sit around holding internal DRAM afterwards.
+  http.setReuse(false);
   if (!http.begin(client,
                   "http://ip-api.com/json/"
                   "?fields=status,city,lat,lon,offset")) {
@@ -87,7 +52,12 @@ bool WeatherHttp::geolocate(double& lat, double& lon, char* city,
     http.end();
     return false;
   }
-  JsonDocument doc;
+  // Parse into PSRAM, like every other JSON parse in this firmware: a default
+  // JsonDocument allocates in internal DRAM, and DRAM churn on the network path
+  // is what fragments the heap the panel driver needs (see psram_http.hpp).
+  // The body is ~1 KB and not chunked, so streaming straight into the parser is
+  // still correct here — PsramBody is for the big chunked responses.
+  JsonDocument doc(&adapters::psramJson());
   DeserializationError e = deserializeJson(doc, http.getStream());
   http.end();
   if (e || strcmp(doc["status"] | "", "success") != 0) {
@@ -192,10 +162,15 @@ bool WeatherHttp::fetch(double lat, double lon, const char* city,
   int di = 0;
   for (JsonObject day : doc["weather"].as<JsonArray>()) {
     if (di < 3) {
+      // Every field has to be present and in range before the date is used.
+      // sscanf reports how many fields it filled, and a body that matches only
+      // the year leaves the month at 0 — which used to reach the day-of-week
+      // table with an index of -1. An unparseable date now simply leaves
+      // w.days[di].name at its default empty value.
       int y = 0, mo = 0, dd = 0;
-      sscanf(day["date"] | "", "%d-%d-%d", &y, &mo, &dd);
-      if (y)
-        strlcpy(w.days[di].name, dowName(dow(y, mo, dd)),
+      if (sscanf(day["date"] | "", "%d-%d-%d", &y, &mo, &dd) == 3 && y > 0 &&
+          mo >= 1 && mo <= 12 && dd >= 1 && dd <= 31)
+        strlcpy(w.days[di].name, domain::dowName(domain::dowIndex(y, mo, dd)),
                 sizeof(w.days[di].name));
       w.days[di].tMax = atofOr(day["maxtempC"] | "");
       w.days[di].tMin = atofOr(day["mintempC"] | "");
@@ -203,8 +178,8 @@ bool WeatherHttp::fetch(double lat, double lon, const char* city,
     for (JsonObject h : day["hourly"].as<JsonArray>()) {
       int hour = atoi(h["time"] | "0") / 100;
       if (di < 3 && hour == 12)
-        shortCond(h["weatherDesc"][0]["value"] | "", w.days[di].cond,
-                  sizeof(w.days[di].cond));
+        domain::shortCond(h["weatherDesc"][0]["value"] | "", w.days[di].cond,
+                          sizeof(w.days[di].cond));
       if (nflat < 24) {
         flat[nflat++] = {hour, atofOr(h["tempC"] | ""),
                          (int)(h["uvIndex"] | 0)};
@@ -235,7 +210,7 @@ bool WeatherHttp::fetch(double lat, double lon, const char* city,
     if (i == 0)
       strlcpy(w.hours[0].label, "Now", sizeof(w.hours[0].label));
     else
-      hourLabel(f.hour, w.hours[i].label, sizeof(w.hours[i].label));
+      domain::hourLabel(f.hour, w.hours[i].label, sizeof(w.hours[i].label));
     w.hours[i].tempC = f.t;
     w.hours[i].uv = f.uv;
     w.nHours++;
@@ -252,8 +227,8 @@ bool WeatherHttp::fetch(double lat, double lon, const char* city,
   }
   if (uvFirst >= 0) {
     char a[6], b[6];
-    hourLabel(uvFirst, a, sizeof(a));
-    hourLabel(uvLast, b, sizeof(b));
+    domain::hourLabel(uvFirst, a, sizeof(a));
+    domain::hourLabel(uvLast, b, sizeof(b));
     snprintf(w.uvWindow, sizeof(w.uvWindow), "%s-%s", a, b);
     w.uvWindowMax = uvMax;
   } else {

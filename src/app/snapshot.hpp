@@ -12,7 +12,7 @@ enum class NetState : uint8_t { Booting, Connecting, Online, Stale, Offline };
 
 struct Snapshot {
   domain::Measurement m;      // latest good AirGradient reading
-  domain::Weather weather;    // latest outdoor weather + UV (Open-Meteo)
+  domain::Weather weather;    // latest outdoor weather + UV (wttr.in)
   domain::Currency currency;  // exchange rates + USD/UAH history
   NetState state = NetState::Booting;
   int rssi = 0;           // ESP32's own RSSI to the AP, dBm

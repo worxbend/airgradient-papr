@@ -1,5 +1,7 @@
 // src/domain/weather.hpp
-// Outdoor weather + UV model (Open-Meteo) and geolocation (ip-api). Pure.
+// Outdoor weather + UV model (wttr.in ?format=j1) and geolocation (ip-api).
+// The field shapes below follow that response: FcDay/FcHour mirror its daily
+// and 3-hourly arrays, and `desc` holds its free-text condition string. Pure.
 #pragma once
 #include <cmath>
 #include <cstdint>
@@ -47,7 +49,7 @@ struct Weather {
   uint32_t ageMs = 0;
 };
 
-// WMO weather interpretation code -> short text (Open-Meteo docs).
+// WMO weather interpretation code -> short text (WMO code table 4677).
 inline const char* wmoText(int code) {
   switch (code) {
     case 0:
