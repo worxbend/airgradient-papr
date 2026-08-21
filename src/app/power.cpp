@@ -24,15 +24,19 @@ float batteryVoltage() {
   return (mv * 2.0f) / 1000.0f;  // undo the 2:1 divider
 }
 
-int batteryPercent() {
+int batteryPercent(float volts) {
   // Coarse linear map over the usable LiPo span. Real discharge is non-linear,
   // but for a glanceable "roughly how full" indicator this is enough and never
   // reports outside 0..100.
-  float v = batteryVoltage();
-  float p = (v - 3.30f) / (4.20f - 3.30f) * 100.0f;
+  float p =
+      (volts - kBatteryEmptyV) / (kBatteryFullV - kBatteryEmptyV) * 100.0f;
   if (p < 0) p = 0;
   if (p > 100) p = 100;
   return (int)(p + 0.5f);
+}
+
+int batteryPercent() {
+  return batteryPercent(batteryVoltage());
 }
 
 }  // namespace app

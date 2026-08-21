@@ -125,25 +125,41 @@ static void waitForPanelIdle(uint32_t maxWaitMs = 5000) {
     vTaskDelay(pdMS_TO_TICKS(20));
 }
 
-static void fetchWeather(adapters::WeatherHttp& wx, app::Snapshot& snap,
-                         bool& geoDone, double& lat, double& lon) {
-  if (!geoDone) {
-    long off = 0;
-    if (cfg::kLatitude != 0.0 || cfg::kLongitude != 0.0) {
-      lat = cfg::kLatitude;
-      lon = cfg::kLongitude;
-      geoDone = true;
-    } else if (wx.geolocate(lat, lon, snap.weather.city,
-                            sizeof(snap.weather.city), off)) {
-      geoDone = true;
-      Serial.printf("[geo] %.3f, %.3f  %s\n", lat, lon, snap.weather.city);
-    } else {
-      Serial.printf("[geo] failed: %s\n", wx.lastError());
-      return;
-    }
+// Where the weather is fetched for. lat/lon carry no meaning until `resolved`
+// is true, which is why the two live in one value instead of as loose locals:
+// the only way to read them is to have been handed a fix that resolveGeoFix()
+// already vouched for.
+struct GeoFix {
+  bool resolved = false;
+  double lat = 0, lon = 0;
+};
+
+// Fill `fix` once, from the configured coordinates if there are any, otherwise
+// from an IP lookup. Returns whether the fix is usable; a failed lookup leaves
+// it unresolved so the next pass simply tries again.
+static bool resolveGeoFix(adapters::WeatherHttp& wx, app::Snapshot& snap,
+                          GeoFix& fix) {
+  if (fix.resolved) return true;
+  long off = 0;
+  if (cfg::kLatitude != 0.0 || cfg::kLongitude != 0.0) {
+    fix.lat = cfg::kLatitude;
+    fix.lon = cfg::kLongitude;
+    fix.resolved = true;
+  } else if (wx.geolocate(fix.lat, fix.lon, snap.weather.city,
+                          sizeof(snap.weather.city), off)) {
+    fix.resolved = true;
+    Serial.printf("[geo] %.3f, %.3f  %s\n", fix.lat, fix.lon,
+                  snap.weather.city);
+  } else {
+    Serial.printf("[geo] failed: %s\n", wx.lastError());
   }
+  return fix.resolved;
+}
+
+static void fetchWeather(adapters::WeatherHttp& wx, app::Snapshot& snap,
+                         const GeoFix& fix) {
   domain::Weather w;
-  if (wx.fetch(lat, lon, snap.weather.city, w)) {
+  if (wx.fetch(fix.lat, fix.lon, snap.weather.city, w)) {
     snap.weather = w;
     Serial.printf("[wx] %s %.0fC UV %.0f %s\n", w.city, w.tempC, w.uvIndex,
                   w.desc);
@@ -151,6 +167,21 @@ static void fetchWeather(adapters::WeatherHttp& wx, app::Snapshot& snap,
     Serial.printf("[wx] failed: %s\n", wx.lastError());
   }
 }
+
+// One schedule test for the three pollers below: has `periodSeconds` elapsed
+// since `lastMs` (or has this poller never run)? Stamps `lastMs` when it says
+// yes, so the caller cannot forget to. Unsigned subtraction makes the millis()
+// rollover at ~49 days a non-event.
+static bool pollDue(uint32_t& lastMs, uint32_t periodSeconds, uint32_t now) {
+  if (lastMs != 0 && now - lastMs < periodSeconds * 1000UL) return false;
+  lastMs = now;
+  return true;
+}
+
+// A reading older than this many poll intervals is what flips the panel's
+// "LAST SEEN n MIN" badge from Online to Stale: one missed poll can be a blip,
+// three in a row means the sensor really is out of touch.
+static constexpr uint32_t kStalePollMultiple = 3;
 
 static void netTask(void*) {
   adapters::WifiLink wifi(cfg::kWifiSsid, cfg::kWifiPass);
@@ -167,11 +198,11 @@ static void netTask(void*) {
              "time.nist.gov");
 
   uint32_t lastPoll = 0, lastWeather = 0, lastCurrency = 0;
-  bool geoDone = false;
-  double lat = 0, lon = 0;
+  GeoFix fix;
   uint32_t lastStackCheck = 0;
   for (;;) {
-    app::g_health.netTickMs = millis();  // liveness beacon (watched by loop())
+    const uint32_t now = millis();
+    app::g_health.netTickMs = now;  // liveness beacon (watched by loop())
 
     // Stack low-water mark every ~10 s (the call scans the stack — too costly
     // for every 50 ms pass). ESP-IDF returns bytes, not FreeRTOS words.
@@ -196,21 +227,18 @@ static void netTask(void*) {
     adapters::netServicesBegin("airdeck");  // idempotent
     adapters::netServicesHandle();
 
-    uint32_t nowW = millis();
-    if (lastWeather == 0 ||
-        nowW - lastWeather >= cfg::kWeatherPollSeconds * 1000UL) {
-      lastWeather = nowW;
+    if (pollDue(lastWeather, cfg::kWeatherPollSeconds, now)) {
       waitForPanelIdle();
-      fetchWeather(wx, snap, geoDone, lat, lon);
+      if (resolveGeoFix(wx, snap, fix)) fetchWeather(wx, snap, fix);
       xQueueOverwrite(g_mailbox, &snap);
     }
 
-    uint32_t nowC = millis();
-    bool timeReady = app::timeIsSynced();
-    if ((lastCurrency == 0 && timeReady) ||
-        (lastCurrency != 0 &&
-         nowC - lastCurrency >= cfg::kCurrencyPollSeconds * 1000UL)) {
-      lastCurrency = nowC;
+    // Only the FIRST currency fetch waits for a synced clock (the API is asked
+    // for a dated history series, which needs today's date). Later fetches run
+    // on the timer alone.
+    const bool timeReady = app::timeIsSynced();
+    if ((lastCurrency != 0 || timeReady) &&
+        pollDue(lastCurrency, cfg::kCurrencyPollSeconds, now)) {
       waitForPanelIdle();
       domain::Currency cc;
       if (currency.fetch(cc)) {
@@ -225,9 +253,7 @@ static void netTask(void*) {
       xQueueOverwrite(g_mailbox, &snap);
     }
 
-    uint32_t now = millis();
-    if (lastPoll == 0 || now - lastPoll >= cfg::kPollSeconds * 1000UL) {
-      lastPoll = now;
+    if (pollDue(lastPoll, cfg::kPollSeconds, now)) {
       waitForPanelIdle();
       domain::Measurement m;
       if (source.poll(m)) {
@@ -251,7 +277,7 @@ static void netTask(void*) {
                       (unsigned long)snap.consecutiveFail);
         if (snap.m.valid) {
           uint32_t age = millis() - snap.lastOkMs;
-          snap.state = (age > 3 * cfg::kPollSeconds * 1000UL)
+          snap.state = (age > kStalePollMultiple * cfg::kPollSeconds * 1000UL)
                            ? app::NetState::Stale
                            : app::NetState::Online;
         } else {
@@ -348,11 +374,14 @@ void loop() {
       break;
   }
 
-  // De-ghost on demand (GET /repair). The endpoint runs on the net task and
-  // only raises a flag; the panel work happens here, on the task that owns it.
+  // De-ghost on demand (/repair). The endpoint runs on the net task and only
+  // raises a flag; the panel work happens here, on the task that owns it.
   if (adapters::netServicesTakeRepairRequest()) {
     Serial.println("[epd] de-ghost requested — running repair routine");
-    if (!g_guard.repairRoutine()) Serial.println("[epd] repair: alloc failed");
+    // repairRoutine() logs which of its refusal reasons applied, so there is
+    // nothing useful to add here — the old "alloc failed" line named only one
+    // of them and pointed troubleshooting at the wrong subsystem.
+    (void)g_guard.repairRoutine();
     ui::refreshCurrent();  // repaint over the white the routine leaves behind
   }
 
@@ -366,24 +395,33 @@ void loop() {
   // Retry any push an earlier gate deferred (rate limit, heap, temperature).
   g_guard.tick();
 
+  // Read the starvation timer once: the health mirror below and the reboot test
+  // further down must agree, and two separate reads a few lines apart can
+  // report different values if the gate clears in between.
+  const uint32_t starved = g_guard.heapStarvedMs();
+
   app::g_health.fullRefreshes = g_guard.fullRefreshes();
   app::g_health.refreshDeferredRate = g_guard.deferredRateLimit();
   app::g_health.refreshDeferredHeap = g_guard.deferredLowHeap();
   app::g_health.refreshDeferredTemp = g_guard.deferredTemp();
   app::g_health.lastRefreshMs = g_guard.lastRefreshMs();
   app::g_health.maxRefreshMs = g_guard.maxRefreshMs();
-  app::g_health.refreshStarvedMs = g_guard.heapStarvedMs();
+  app::g_health.refreshStarvedMs = starved;
 
   // Refresh-starvation backstop, symmetric with the net-stall watchdog below.
   // The heap gate deferring is normal for seconds (a TLS handshake in flight);
   // deferring CONTINUOUSLY for minutes means internal DRAM is fragmented for
   // good, and only a reboot heals that. Without this, the failure mode is a
   // healthy-looking device showing a stale image forever.
-  const uint32_t starved = g_guard.heapStarvedMs();
   if (starved > cfg::kRefreshStarveRebootSeconds * 1000UL) {
     Serial.printf("[fatal] refresh starved by heap gate for %lus — rebooting\n",
                   (unsigned long)(starved / 1000));
     Serial.flush();
+    // This restart is deliberate, not a crash. Recording it keeps the NVS
+    // "clean" flag meaning what its comment says — only a panic, watchdog reset
+    // or power-pull should read as unclean and cost the next boot the extra
+    // full-screen settle frame that exists for crash recovery.
+    g_guard.markCleanShutdown();
     esp_restart();
   }
 
@@ -396,6 +434,7 @@ void loop() {
     Serial.printf("[fatal] net task stalled %lus — rebooting\n",
                   (unsigned long)(netAge / 1000));
     Serial.flush();
+    g_guard.markCleanShutdown();  // orderly restart — see the note above
     esp_restart();
   }
 
@@ -472,7 +511,12 @@ static uint32_t measurementSignature(const domain::Measurement& m) {
 // displayUp: whether bringUpDisplay() ran this wake. A skip-refresh wake never
 // initialises the panel, and epd_poweroff_all() on an uninitialised driver
 // would poke unconfigured rails.
-static void sleepFor(uint32_t seconds, bool displayUp) {
+//
+// [[noreturn]] states the contract callers already rely on: this function ends
+// the wake, so nothing after a call to it runs. Callers such as the brownout
+// gate below have no `return` of their own; with the attribute the compiler
+// checks that for us and warns if a future edit ever adds a path back out.
+[[noreturn]] static void sleepFor(uint32_t seconds, bool displayUp) {
   rtcCleanShutdown = true;  // clean flag -> next wake may preserve the image
   if (displayUp) g_guard.powerOffForSleep();  // rails + peripherals down
   WiFi.disconnect(true, false);
@@ -522,7 +566,10 @@ void setup() {
   };
 
   float vbat = app::batteryVoltage();
-  Serial.printf("[batt] %.2f V (%d%%)\n", vbat, app::batteryPercent());
+  // Both numbers come from the one 16-sample average taken above. Calling the
+  // no-arg batteryPercent() here would take a second average, doubling the ADC
+  // work on a path where every millisecond awake costs battery life.
+  Serial.printf("[batt] %.2f V (%d%%)\n", vbat, app::batteryPercent(vbat));
 
   // Brownout gate: too low to safely drive a waveform -> show a static charge
   // screen once and sleep long. vbat<=0.5 means "no divider / on USB". The
@@ -590,13 +637,14 @@ void setup() {
 
   if (doRefresh) {
     if (!ensureDisplay()) {
-      // Nothing to draw with. Don't touch the (uninitialised) panel rails —
-      // just sleep out the normal interval and retry from a fresh boot.
+      // Nothing to draw with. Sleep out the normal interval and retry from a
+      // fresh boot. displayUp is false here by construction (ensureDisplay()
+      // just failed), so sleepFor leaves the uninitialised panel rails alone —
+      // and unlike a hand-rolled esp_deep_sleep_start() it still isolates
+      // GPIO12 and drops the radio, which is what keeps this branch from
+      // draining the pack every wake if the failure repeats.
       Serial.println("[fatal] display bring-up failed — sleeping");
-      Serial.flush();
-      esp_sleep_enable_timer_wakeup((uint64_t)cfg::kBatteryPollSeconds *
-                                    1000000ULL);
-      esp_deep_sleep_start();
+      sleepFor(cfg::kBatteryPollSeconds, /*displayUp=*/false);
     }
     ui::update(snap);     // refresh page models (built by ensureDisplay)
     ui::showMainNow();    // leave splash, show the dashboard, full-invalidate
